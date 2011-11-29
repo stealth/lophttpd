@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Sebastian Krahmer.
+ * Copyright (C) 2010,2011 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,6 +34,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
+#include <cstdio>
 #include <errno.h>
 #include <sys/mman.h>
 #include <sys/types.h>
@@ -51,14 +52,17 @@ static inline off_t next_aligned_size(off_t size)
 }
 
 
-int log_provider::open_log(const string &logfile, const string &method)
+int log_provider::open_log(const string &logfile, const string &method, int core = 0)
 {
 	struct stat st;
 	int flags = O_RDWR|O_CREAT;
 
 	if (method != "mmap")
 		flags |= O_APPEND;
-	log_fd = open(logfile.c_str(), flags, 0600);
+
+	char lfile[1024];
+	snprintf(lfile, sizeof(lfile), "%s.%d", logfile.c_str(), core);
+	log_fd = open(lfile, flags, 0600);
 	if (log_fd < 0) {
 		err = "log_provider::open_log::open:";
 		err += strerror(errno);
@@ -106,9 +110,7 @@ int log_provider::log(const string &msg)
 
 int log_provider::write_log(const string &msg)
 {
-	flock(log_fd, LOCK_EX);
 	ssize_t r = write(log_fd, msg.c_str(), msg.size());
-	flock(log_fd, LOCK_UN);
 	return (int)r;
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Sebastian Krahmer.
+ * Copyright (C) 2008-2011 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -207,7 +207,7 @@ int lonely::loop()
 		memset(&tm, 0, sizeof(tm));
 		gettimeofday(&tv, NULL);
 		cur_time = tv.tv_sec;
-		gmtime_r(&cur_time, &tm);
+		localtime_r(&cur_time, &tm);
 		strftime(date_str, sizeof(date_str), "%a, %d %b %Y %H:%M:%S GMT", &tm);
 
 		for (i = first_fd; i <= max_fd; ++i) {
@@ -295,14 +295,14 @@ const uint8_t lonely_http::timeout_header = 3;
 const uint8_t lonely::timeout_alive = 30;
 
 
-int lonely_http::open_log(const string &logfile, const string &method)
+int lonely_http::open_log(const string &logfile, const string &method, int core = 0)
 {
 	logger = new (nothrow) log_provider;
 	if (!logger) {
 		err = "OOM";
 		return -1;
 	}
-	int r = logger->open_log(logfile, method);
+	int r = logger->open_log(logfile, method, core);
 	if (r < 0)
 		err = logger->why();
 	return r;

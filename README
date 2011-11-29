@@ -84,12 +84,20 @@ also say "mmap". Then it is using a mmap-backed buffer which speeds
 up logging. "aio" is also spupported which uses the POSIX realtime
 aio_ calls. However this could lead to drops of messages if
 under very heavy load. Remember that lophttpd is still single threaded,
-even with different log providers.
+even with different log providers. (For aio to be really
+single threaded you may want to check out my Linux aio implementation
+since glibc is using pthreads under the hood.)
 
 Since version 0.86 lophttpd supports multicore setups for Linux.
 If run without any -n switch, lophttpd will run one process per core.
 You can turn this off by using "-n 1" or you specify the number
 of cores you want lophttpd to use.
+
+Since version 0.88 lophttpd has one logfile per core. If you run on two
+cores you get "logfile.0" and "logfile.1". This way we avoid file locking.
+lophttpd is now also using localtime instead of gmtime in the logs,
+so take care to have the right TZ environment variable set when starting
+lhttpd or it will use UTC.
 
 If you have ideas and or offer performance/testing environment please
 drop me an email: sebastian.krahmer [at] gmail [dot] com :-)

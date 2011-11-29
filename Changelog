@@ -1,7 +1,16 @@
+0.88
+----
++ Tue Nov 29
++ Imported lophttpd cvs to github (git://github.com/stealth/lophttpd.git)
++ every core (if using multicore) now gets its own logfile (suffixed with .<N>)
+  so we dont leed file locking anymore and all log providers now also work
+  with multicore support
++ changed gmtime logging to localtime
+
 0.87
 ----
 
-+ Thu Feb 17 
++ Thu Feb 17
 + Add Date: string to HTTP replies so httpdate works
   properly
 

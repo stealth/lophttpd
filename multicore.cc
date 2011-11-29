@@ -22,6 +22,7 @@ namespace NS_Misc {
 using namespace std;
 
 int ncpus = 1;
+int my_core = 0;
 
 static int get_cores()
 {
@@ -82,6 +83,7 @@ int setup_multicore(int n)
 		return -1;
 	}
 
+	my_core = 0;
 	pid_t pid = 0;
 	// fork a child for each core
 	for (int i = 1; i < n; ++i) {
@@ -101,6 +103,7 @@ int setup_multicore(int n)
 			CPU_FREE(cpuset);
 			return -1;
 		}
+		my_core = i;
 		Config::master = 0;
 		break;
 	}

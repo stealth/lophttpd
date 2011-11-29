@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <aio.h>
 
+
 class log_provider {
 private:
 	int log_fd;
@@ -28,9 +29,12 @@ public:
 
 	int log(const std::string &);
 
-	int open_log(const std::string &, const std::string &);
+	int open_log(const std::string &, const std::string &, int core);
 
-	log_provider() {};
+	log_provider()
+		: log_fd(-1), log_area((void *)-1), log_index(0), log_size(0)
+	{
+	};
 
 	~log_provider();
 };

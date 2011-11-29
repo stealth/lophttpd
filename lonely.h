@@ -147,7 +147,7 @@ public:
 
 	int send_genindex();
 
-	int open_log(const std::string &, const std::string &);
+	int open_log(const std::string &, const std::string &, int core);
 
 	void clear_cache();
 };

@@ -3,6 +3,8 @@
 
 namespace NS_Misc {
 
+extern int my_core;
+
 int init_multicore();
 
 int setup_multicore(int);

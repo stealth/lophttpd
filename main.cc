@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Sebastian Krahmer.
+ * Copyright (C) 2008-2011 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -160,11 +160,9 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (Config::cores != 1)
-		Config::log_provider = "file";
-
 	uid_t euid = geteuid();
 
+	tzset();
 	close_fds();
 
 	if (httpd.init(Config::port) < 0) {
@@ -172,13 +170,15 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	if (httpd.open_log(Config::logfile, Config::log_provider) < 0) {
+	// Needs to be called before chroot
+	NS_Misc::init_multicore();
+	NS_Misc::setup_multicore(Config::cores);
+
+	// Every core has its own logfile to avoid locking
+	if (httpd.open_log(Config::logfile, Config::log_provider, NS_Misc::my_core) < 0) {
 		cerr<<"Opening logfile: "<<httpd.why()<<endl;
 		return -1;
 	}
-
-	// Needs to be called before chroot
-	NS_Misc::init_multicore();
 
 	struct passwd *pw = getpwnam(Config::user.c_str());
 	if (!pw) {
@@ -196,14 +196,13 @@ int main(int argc, char **argv)
 	} else
 		Config::is_chrooted = 1;
 
-	if (Config::gen_index) {
+	if (Config::gen_index && Config::master) {
 		if (Config::is_chrooted)
 			NS_Misc::generate_index("/");
 		else
 			NS_Misc::generate_index(Config::root);
 	}
 
-	NS_Misc::setup_multicore(Config::cores);
 
 	if (setgid(pw->pw_gid) < 0)
 		die("setgid", euid == 0);
