@@ -196,7 +196,7 @@ int main(int argc, char **argv)
 	} else
 		Config::is_chrooted = 1;
 
-	if (Config::gen_index && Config::master) {
+	if (Config::gen_index) {
 		if (Config::is_chrooted)
 			NS_Misc::generate_index("/");
 		else

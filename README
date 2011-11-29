@@ -99,6 +99,13 @@ lophttpd is now also using localtime instead of gmtime in the logs,
 so take care to have the right TZ environment variable set when starting
 lhttpd or it will use UTC.
 
+If you use multicore support, every process will have its own cache
+for open files and stats. Do not run lhttpd on large read-only directories w/o
+index.html and autoindexing since it needs to keep a big cache about
+indexing information in memory then (per core!). This does not happen
+if the directory is writable since lophttpd will dump content into a
+index.html file if above a certain threshold.
+
 If you have ideas and or offer performance/testing environment please
 drop me an email: sebastian.krahmer [at] gmail [dot] com :-)
 
