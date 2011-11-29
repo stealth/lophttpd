@@ -1,0 +1,45 @@
+0.87
+----
+
++ Thu Feb 17 
++ Add Date: string to HTTP replies so httpdate works
+  properly
+
+0.86
+----
++ Sat Okt 30 2010
++ Adding multicore support for Linux
+
+0.85
+----
++ Sat Jun 26 2010
++ Fixed a bug that lead to truncation of large files.
+  Content-Length was using %d rather than %zu :(
+
+0.83
+----
++ Wed Jun 16 2010
++ made mmap provider portable
+
+0.82
+----
+
++ Mon Jun 7 2010
++ Added log providers. For heavy loaded machines one can try to
+  get some benefit by using mmap or aio log provider in order to
+  prevent millions of write()s to disk.
+
+0.80
+----
+
++ Sun May 30 2010
++ Security: Fixed access to unmapped memory if large directories
+  are autoindexed
+  Thanks to Alexander Hagenah for sending a bug report
++ Security: Fixed handling of large amounts of "wget -r" for many
+  files, including potential out of bounds write to the poll
+  array
++ Introducing a timeout in which valid headers must arrive
+  in order to handle slow links and clients which may send large
+  requests
+
