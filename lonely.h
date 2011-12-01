@@ -94,17 +94,22 @@ struct peer_file {
 
 typedef enum {
 	HTTP_ERROR_400 = 0,
-	HTTP_ERROR_401 = 1,
-	HTTP_ERROR_404 = 2,
-	HTTP_ERROR_END = 3,
+	HTTP_ERROR_401,
+	HTTP_ERROR_404,
+	HTTP_ERROR_405,
+	HTTP_ERROR_406,
+	HTTP_ERROR_411,
+	HTTP_ERROR_500,
+	HTTP_ERROR_501,
+	HTTP_ERROR_503,
+	HTTP_ERROR_END
 } http_error_code_t;
 
 
 class lonely_http : public lonely {
 private:
-	time_t last_logtime;
 	struct stat cur_stat;
-	std::string cur_path, last_logprefix;
+	std::string cur_path;
 	std::map<int, struct peer_file> peer2file;
 	log_provider *logger;
 
@@ -116,11 +121,21 @@ private:
 	// open FD cache
 	std::map<const std::string, int> file2fd;
 
+	int OPTIONS();
+
 	int GET();
+
+	int HEAD();
 
 	int POST();
 
-	int HEAD();
+	int PUT();
+
+	int DELETE();
+
+	int TRACE();
+
+	int CONNECT();
 
 	int de_escape_path();
 
@@ -137,7 +152,7 @@ private:
 public:
 	bool vhosts;
 
-	lonely_http() : last_logtime(0), cur_path(""), last_logprefix(""), logger(NULL), vhosts(0) {};
+	lonely_http() : cur_path(""), logger(NULL), vhosts(0) {};
 
 	virtual ~lonely_http() { delete logger;};
 

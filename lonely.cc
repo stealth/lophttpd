@@ -90,10 +90,17 @@ struct ext2CT {
 };
 
 
+// Must match order of http_error_code_t enum
 string http_error_msgs[] = {
-	"400 Bad request",
+	"400 Bad Request",
 	"401 Unauthorized",
-	"404 Not found"
+	"404 Not Found",
+	"405 Method Not Allowed",
+	"406 Not Acceptable",
+	"411 Length Required",
+	"500 Internal Server Error",
+	"501 Not Implemented",
+	"503 Service Unavailable"
 };
 
 
@@ -208,7 +215,7 @@ int lonely::loop()
 		gettimeofday(&tv, NULL);
 		cur_time = tv.tv_sec;
 		localtime_r(&cur_time, &tm);
-		strftime(date_str, sizeof(date_str), "%a, %d %b %Y %H:%M:%S GMT", &tm);
+		strftime(date_str, sizeof(date_str), "%a, %d %b %Y %H:%M:%S GMT%z", &tm);
 
 		for (i = first_fd; i <= max_fd; ++i) {
 			if (pfds[i].fd == -1)
@@ -453,6 +460,42 @@ int lonely_http::HEAD()
 }
 
 
+int lonely_http::OPTIONS()
+{
+	string reply = "HTTP/1.1 200 OK\r\nDate: ";
+	reply += date_str;
+	reply += "\r\nContent-Length: 0\r\nAllow: OPTIONS, GET, HEAD, POST\r\nServer: lophttpd\r\n\r\n";
+	string logstr = "OPTIONS\n";
+	log(logstr);
+	return writen(cur_peer, reply.c_str(), reply.size());
+}
+
+
+int lonely_http::DELETE()
+{
+	return send_error(HTTP_ERROR_405);
+}
+
+
+int lonely_http::CONNECT()
+{
+	return send_error(HTTP_ERROR_405);
+}
+
+
+int lonely_http::TRACE()
+{
+	return send_error(HTTP_ERROR_501);
+}
+
+
+int lonely_http::PUT()
+{
+	return send_error(HTTP_ERROR_405);
+}
+
+
+
 int lonely_http::POST()
 {
 	string logstr = "POST ";
@@ -599,7 +642,9 @@ int lonely_http::send_error(http_error_code_t e)
 	if (e >= HTTP_ERROR_END)
 		e = HTTP_ERROR_400;
 	http_header += http_error_msgs[e];
-	http_header += "\r\nServer: lophttpd\r\nConnection: close\r\n\r\n";
+	http_header += "\r\nServer: lophttpd\r\nDate: ";
+	http_header += date_str;
+	http_header += "Content-Length: 0\r\nConnection: close\r\n\r\n";
 	writen(cur_peer, http_header.c_str(), http_header.size());
 	fd2state[cur_peer]->keep_alive = 0;
 	return 0;
@@ -647,12 +692,20 @@ int lonely_http::handle_request()
 
 	int (lonely_http::*action)() = NULL;
 
-	if (strncasecmp(req_buf, "GET", 3) == 0)
+	if (strncasecmp(req_buf, "OPTIONS", 7) == 0)
+		action = &lonely_http::OPTIONS;
+	else if (strncasecmp(req_buf, "GET", 3) == 0)
 		action = &lonely_http::GET;
 	else if (strncasecmp(req_buf, "POST", 4) == 0)
 		action = &lonely_http::POST;
 	else if (strncasecmp(req_buf, "HEAD", 4) == 0)
 		action = &lonely_http::HEAD;
+	else if (strncasecmp(req_buf, "PUT", 3) == 0)
+		action = &lonely_http::PUT;
+	else if (strncasecmp(req_buf, "DELETE", 6) == 0)
+		action = &lonely_http::DELETE;
+	else if (strncasecmp(req_buf, "TRACE", 5) == 0)
+		action = &lonely_http::TRACE;
 	else {
 		send_error(HTTP_ERROR_400);
 		return -1;
