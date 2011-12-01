@@ -98,6 +98,7 @@ string http_error_msgs[] = {
 	"405 Method Not Allowed",
 	"406 Not Acceptable",
 	"411 Length Required",
+	"414 Request-URI Too Large",
 	"500 Internal Server Error",
 	"501 Not Implemented",
 	"503 Service Unavailable"
@@ -215,7 +216,9 @@ int lonely::loop()
 		gettimeofday(&tv, NULL);
 		cur_time = tv.tv_sec;
 		localtime_r(&cur_time, &tm);
-		strftime(date_str, sizeof(date_str), "%a, %d %b %Y %H:%M:%S GMT%z", &tm);
+		strftime(local_date, sizeof(local_date), "%a, %d %b %Y %H:%M:%S GMT%z", &tm);
+		gmtime_r(&cur_time, &tm);
+		strftime(gmt_date, sizeof(gmt_date), "%a, %d %b %Y %H:%M:%S GMT", &tm);
 
 		for (i = first_fd; i <= max_fd; ++i) {
 			if (pfds[i].fd == -1)
@@ -321,7 +324,7 @@ int lonely_http::put_http_header()
 	string http_header = "HTTP/1.1 200 OK\r\n"
 	                     "Server: lophttpd\r\n"
 	                     "Date: ";
-	http_header += date_str;
+	http_header += gmt_date;
 	http_header += "\r\nContent-Type: %s\r\n"
 	               "Content-Length: %zu\r\n\r\n";
 
@@ -349,7 +352,7 @@ int lonely_http::send_genindex()
 	string http_header = "HTTP/1.1 200 OK\r\n"
 	                     "Server: lophttpd\r\n"
 	                     "Date: ";
-	http_header += date_str;
+	http_header += gmt_date;
 	http_header += "\r\nContent-Length: %zu\r\n"
                        "Content-Type: text/html\r\n\r\n%s";
 
@@ -435,7 +438,7 @@ void lonely_http::log(const string &msg)
 	if (!logger)
 		return;
 
-	string prefix = date_str;
+	string prefix = local_date;
 
 	char dst[128];
 	inet_ntop(AF_INET, &fd2state[cur_peer]->sin.sin_addr, dst, sizeof(dst));
@@ -450,7 +453,7 @@ void lonely_http::log(const string &msg)
 int lonely_http::HEAD()
 {
 	string head = "HTTP/1.1 200 OK\r\nDate: ";
-	head += date_str;
+	head += gmt_date;
 	head += "\r\nServer: lophttpd\r\n\r\n";
 	fd2state[cur_peer]->keep_alive = 0;
 
@@ -463,34 +466,37 @@ int lonely_http::HEAD()
 int lonely_http::OPTIONS()
 {
 	string reply = "HTTP/1.1 200 OK\r\nDate: ";
-	reply += date_str;
-	reply += "\r\nContent-Length: 0\r\nAllow: OPTIONS, GET, HEAD, POST\r\nServer: lophttpd\r\n\r\n";
-	string logstr = "OPTIONS\n";
-	log(logstr);
+	reply += gmt_date;
+	reply += "\r\nServer: lophttpd\r\nContent-Length: 0\r\nAllow: OPTIONS, GET, HEAD, POST\r\n\r\n";
+	log("OPTIONS");
 	return writen(cur_peer, reply.c_str(), reply.size());
 }
 
 
 int lonely_http::DELETE()
 {
+	log("DELETE");
 	return send_error(HTTP_ERROR_405);
 }
 
 
 int lonely_http::CONNECT()
 {
+	log("CONNECT");
 	return send_error(HTTP_ERROR_405);
 }
 
 
 int lonely_http::TRACE()
 {
+	log("TRACE");
 	return send_error(HTTP_ERROR_501);
 }
 
 
 int lonely_http::PUT()
 {
+	log("PUT");
 	return send_error(HTTP_ERROR_405);
 }
 
@@ -498,10 +504,6 @@ int lonely_http::PUT()
 
 int lonely_http::POST()
 {
-	string logstr = "POST ";
-	logstr += cur_path;
-	logstr += "\n";
-	log(logstr);
 	return GET();
 }
 
@@ -643,8 +645,8 @@ int lonely_http::send_error(http_error_code_t e)
 		e = HTTP_ERROR_400;
 	http_header += http_error_msgs[e];
 	http_header += "\r\nServer: lophttpd\r\nDate: ";
-	http_header += date_str;
-	http_header += "Content-Length: 0\r\nConnection: close\r\n\r\n";
+	http_header += gmt_date;
+	http_header += "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 	writen(cur_peer, http_header.c_str(), http_header.size());
 	fd2state[cur_peer]->keep_alive = 0;
 	return 0;
@@ -653,7 +655,8 @@ int lonely_http::send_error(http_error_code_t e)
 
 int lonely_http::handle_request()
 {
-	char req_buf[2048], *ptr = NULL, *ptr2 = NULL, *end_ptr = NULL, *last_byte = &req_buf[sizeof(req_buf) - 1];
+	char req_buf[2048], *ptr = NULL, *ptr2 = NULL, *end_ptr = NULL, *last_byte = &req_buf[sizeof(req_buf) - 1],
+	     body[2048];
 	int n;
 
 	memset(req_buf, 0, sizeof(req_buf));
@@ -679,9 +682,6 @@ int lonely_http::handle_request()
 		return 0;
 	}
 
-
-	fd2state[cur_peer]->keep_alive = 0;
-
 	// read exactly the header from the queue, including \r\n\r\n
 	if ((n = read(cur_peer, req_buf, ptr - req_buf + 4)) <= 0) {
 		err = "lonely_http::handle_connection::read:";
@@ -689,7 +689,37 @@ int lonely_http::handle_request()
 		return -1;
 	}
 
+	end_ptr = ptr + n;
 
+	// For POST requests, we also require a Content-Length that matches.
+	// The above if() already ensured we have header until "\r\n\r\n"
+	if (strncmp(req_buf, "POST", 4) == 0) {
+		if ((ptr = strcasestr(req_buf, "Content-Length:")) != NULL) {
+			while (ptr < end_ptr) {
+				if (*ptr == ' ')
+					++ptr;
+			}
+			if (ptr >= end_ptr) {
+				send_error(HTTP_ERROR_400);
+				return -1;
+			}
+			size_t cl = strtoul(ptr, NULL, 10);
+			if (cl >= sizeof(body))
+				send_error(HTTP_ERROR_414);
+			// The body should be right here, we dont mind if stupid senders
+			// send them separately
+			if ((size_t)recv(cur_peer, body, sizeof(body), MSG_DONTWAIT) != cl) {
+				send_error(HTTP_ERROR_400);
+				return -1;
+			}
+		} else {
+			send_error(HTTP_ERROR_411);
+			return -1;
+		}
+	}
+
+
+	fd2state[cur_peer]->keep_alive = 0;
 	int (lonely_http::*action)() = NULL;
 
 	if (strncasecmp(req_buf, "OPTIONS", 7) == 0)
@@ -725,16 +755,6 @@ int lonely_http::handle_request()
 	}
 	end_ptr[1] = 0;
 
-/* realpath() is not really necessary. it uses lstat() on every path component which slows
-  down the process. We are running in a chroot anyways.
-	if (string(ptr) == "/index.html") {
-		cur_path = "/";
-	} else if (realpath(ptr, rp) == NULL) {
-		send_error(HTTP_ERROR_404);
-		return -1;
-	} else
-		cur_path = rp;
-*/
 	cur_path = ptr;
 
 	ptr = end_ptr + 2; // rest of header

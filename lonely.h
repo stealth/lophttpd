@@ -54,7 +54,7 @@ protected:
 	int cur_peer;
 	time_t cur_time;
 
-	char date_str[64];
+	char gmt_date[64], local_date[64];
 
 	std::string err;
 
@@ -99,6 +99,7 @@ typedef enum {
 	HTTP_ERROR_405,
 	HTTP_ERROR_406,
 	HTTP_ERROR_411,
+	HTTP_ERROR_414,
 	HTTP_ERROR_500,
 	HTTP_ERROR_501,
 	HTTP_ERROR_503,
