@@ -118,6 +118,10 @@ int setup_multicore(int n)
 
 namespace NS_Misc {
 
+int init_multicore()
+{
+}
+
 int setup_multicore(int n)
 {
 	return 0;
