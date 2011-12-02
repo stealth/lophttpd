@@ -86,9 +86,9 @@ public:
 
 
 struct peer_file {
-	off_t offset;	// file offset
-	size_t size;	// size of file to send
-	int fd;		// fd to file to send
+	off_t offset;		// file offset
+	size_t left, copied;	// how much to copy and copied
+	int fd;			// fd to file to send
 	std::string path;
 };
 
@@ -100,6 +100,7 @@ typedef enum {
 	HTTP_ERROR_406,
 	HTTP_ERROR_411,
 	HTTP_ERROR_414,
+	HTTP_ERROR_416,
 	HTTP_ERROR_500,
 	HTTP_ERROR_501,
 	HTTP_ERROR_503,
@@ -107,10 +108,27 @@ typedef enum {
 } http_error_code_t;
 
 
+typedef enum {
+	HTTP_REQUEST_NONE = 0,
+	HTTP_REQUEST_OPTIONS = 1,
+	HTTP_REQUEST_GET,
+	HTTP_REQUEST_HEAD,
+	HTTP_REQUEST_POST,
+	HTTP_REQUEST_PUT,
+	HTTP_REQUEST_DELETE,
+	HTTP_REQUEST_TRACE,
+	HTTP_REQUEST_CONNECT
+} http_request_t;
+
+
 class lonely_http : public lonely {
 private:
 	struct stat cur_stat;
 	std::string cur_path;
+	off_t cur_start_range;
+	size_t cur_end_range;
+	bool cur_range_requested;
+	http_request_t cur_request;
 	std::map<int, struct peer_file> peer2file;
 	log_provider *logger;
 
@@ -140,7 +158,7 @@ private:
 
 	int de_escape_path();
 
-	int put_http_header();
+	int send_http_header();
 
 	int send_error(http_error_code_t);
 
@@ -153,7 +171,10 @@ private:
 public:
 	bool vhosts;
 
-	lonely_http() : cur_path(""), logger(NULL), vhosts(0) {};
+	lonely_http()
+	        : cur_path(""), cur_start_range(0), cur_end_range(0),
+		  cur_range_requested(0), cur_request(HTTP_REQUEST_NONE),
+	          logger(NULL), vhosts(0) {};
 
 	virtual ~lonely_http() { delete logger;};
 

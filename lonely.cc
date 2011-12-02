@@ -99,6 +99,7 @@ string http_error_msgs[] = {
 	"406 Not Acceptable",
 	"411 Length Required",
 	"414 Request-URI Too Large",
+	"416 Requested Range Not Satisfiable",
 	"500 Internal Server Error",
 	"501 Not Implemented",
 	"503 Service Unavailable"
@@ -176,7 +177,7 @@ void lonely::cleanup(int fd)
 //	assert(pfds[fd].fd == fd);
 	pfds[fd].fd = -1;
 	pfds[fd].events = 0;
-	close(fd);
+	shutdown(fd, SHUT_RDWR);
 
 	if (fd2state.find(fd) != fd2state.end() && fd2state[fd]) {
 		delete fd2state[fd];
@@ -319,12 +320,18 @@ int lonely_http::open_log(const string &logfile, const string &method, int core 
 }
 
 
-int lonely_http::put_http_header()
+int lonely_http::send_http_header()
 {
 	string http_header = "HTTP/1.1 200 OK\r\n"
 	                     "Server: lophttpd\r\n"
 	                     "Date: ";
 	http_header += gmt_date;
+	if (cur_range_requested) {
+		char range[256];
+		snprintf(range, sizeof(range), "\r\nRange: bytes=%zu-%zu/%zu",
+		         cur_start_range, cur_end_range, cur_stat.st_size);
+		http_header += range;
+	}
 	http_header += "\r\nContent-Type: %s\r\n"
 	               "Content-Length: %zu\r\n\r\n";
 
@@ -341,7 +348,9 @@ int lonely_http::put_http_header()
 	}
 	if (!content_types[i].c_type.empty())
 		c_type = content_types[i].c_type;
-	snprintf(h_buf, sizeof(h_buf), http_header.c_str(), c_type.c_str(), cur_stat.st_size);
+	snprintf(h_buf, sizeof(h_buf), http_header.c_str(), c_type.c_str(),
+	         cur_end_range - cur_start_range);
+
 	writen(cur_peer, h_buf, strlen(h_buf));
 	return 0;
 }
@@ -380,25 +389,33 @@ int lonely_http::transfer()
 		}
 
 		// stat() already happened in GET/POST
-
-		pf.offset = 0;
-		pf.size = cur_stat.st_size;
+		// the ranges also have been set there
+		pf.offset = cur_start_range;
+		pf.copied = 0;
+		pf.left = cur_end_range - cur_start_range;
 		pf.path = cur_path;
 
-		put_http_header();
+		send_http_header();
 
 	} else {
 		pf = peer2file[cur_peer];
 	}
 
 #ifdef linux
-	ssize_t r = sendfile(cur_peer, pf.fd, &pf.offset, pf.size);
+	ssize_t r = sendfile(cur_peer, pf.fd, &pf.offset, pf.left);
+	if (r > 0) {
+		pf.left -= r;
+		pf.copied += r;
+	}
 #else
 // FreeBSD tested at least
 	off_t sbytes = 0;
-	ssize_t r = sendfile(pf.fd, cur_peer, pf.offset, 0, NULL, &sbytes, 0);
-	if (sbytes > 0)
+	ssize_t r = sendfile(pf.fd, cur_peer, pf.offset, pf.left, NULL, &sbytes, 0);
+	if (sbytes > 0) {
 		pf.offset += sbytes;
+		pf.left -= sbytes;
+		pf.copied += sbytes;
+	}
 #endif
 
 	// Dummy reset of r, if EAGAIN appears on nonblocking socket
@@ -419,7 +436,7 @@ int lonely_http::transfer()
 			close(pf.fd);
 			file2fd.erase(pf.path);
 		}
-	} else if (pf.offset == (ssize_t)pf.size) {
+	} else if (pf.left == 0) {
 		peer2file.erase(cur_peer);
 		//close(pf.fd); Do not close, due to caching
 		fd2state[cur_peer]->state = STATE_CONNECTED;
@@ -452,12 +469,28 @@ void lonely_http::log(const string &msg)
 
 int lonely_http::HEAD()
 {
-	string head = "HTTP/1.1 200 OK\r\nDate: ";
-	head += gmt_date;
-	head += "\r\nServer: lophttpd\r\n\r\n";
 	fd2state[cur_peer]->keep_alive = 0;
+	string head = "";
 
-	string logstr = "HEAD\n";
+	if (stat(cur_path) < 0)
+		head = "HTTP/1.1 404 Not Found\r\nDate: ";
+	else {
+		head = "HTTP/1.1 200 OK\r\n";
+
+		// Do not accept Range: for directories or HTML files
+		if (!S_ISREG(cur_stat.st_mode) || cur_path.find(".html") != string::npos ||
+		    cur_path.find(".htm") != string::npos)
+			head += "Range: none\r\nDate: ";
+		else
+			head += "Range: bytes\r\nDate: ";
+	}
+
+	head += gmt_date;
+	head += "\r\nServer: lophttpd\r\nConnection: close\r\n\r\n";
+
+	string logstr = "HEAD ";
+	logstr += cur_path;
+	logstr += "\n";
 	log(logstr);
 	return writen(cur_peer, head.c_str(), head.size());
 }
@@ -613,6 +646,15 @@ int lonely_http::GET()
 	int r = 0;
 
 	if ((r = stat(cur_path)) == 0 && (S_ISREG(cur_stat.st_mode))) {
+		if (cur_end_range == 0)
+			cur_end_range = cur_stat.st_size;
+		if (cur_start_range < 0 ||
+		    cur_start_range >= cur_stat.st_size ||
+		    cur_end_range > (size_t)cur_stat.st_size ||
+		    (size_t)cur_start_range >= cur_end_range) {
+			send_error(HTTP_ERROR_416);
+			return -1;
+		}
 		if (transfer() < 0)
 			send_error(HTTP_ERROR_404);
 	} else if (r == 0 && S_ISDIR(cur_stat.st_mode)) {
@@ -691,13 +733,20 @@ int lonely_http::handle_request()
 
 	end_ptr = ptr + n;
 
+	fd2state[cur_peer]->keep_alive = 0;
+	int (lonely_http::*action)() = NULL;
+
+	cur_request = HTTP_REQUEST_NONE;
+	cur_start_range = cur_end_range = 0;
+	cur_range_requested = 0;
+
 	// For POST requests, we also require a Content-Length that matches.
 	// The above if() already ensured we have header until "\r\n\r\n"
 	if (strncmp(req_buf, "POST", 4) == 0) {
 		if ((ptr = strcasestr(req_buf, "Content-Length:")) != NULL) {
-			while (ptr < end_ptr) {
-				if (*ptr == ' ')
-					++ptr;
+			for (;ptr < end_ptr; ++ptr) {
+				if (*ptr != ' ')
+					break;
 			}
 			if (ptr >= end_ptr) {
 				send_error(HTTP_ERROR_400);
@@ -716,27 +765,30 @@ int lonely_http::handle_request()
 			send_error(HTTP_ERROR_411);
 			return -1;
 		}
-	}
-
-
-	fd2state[cur_peer]->keep_alive = 0;
-	int (lonely_http::*action)() = NULL;
-
-	if (strncasecmp(req_buf, "OPTIONS", 7) == 0)
-		action = &lonely_http::OPTIONS;
-	else if (strncasecmp(req_buf, "GET", 3) == 0)
-		action = &lonely_http::GET;
-	else if (strncasecmp(req_buf, "POST", 4) == 0)
 		action = &lonely_http::POST;
-	else if (strncasecmp(req_buf, "HEAD", 4) == 0)
+		cur_request = HTTP_REQUEST_POST;
+	} else if (strncasecmp(req_buf, "OPTIONS", 7) == 0) {
+		action = &lonely_http::OPTIONS;
+		cur_request = HTTP_REQUEST_OPTIONS;
+	} else if (strncasecmp(req_buf, "GET", 3) == 0) {
+		action = &lonely_http::GET;
+		cur_request = HTTP_REQUEST_GET;
+	} else if (strncasecmp(req_buf, "HEAD", 4) == 0) {
 		action = &lonely_http::HEAD;
-	else if (strncasecmp(req_buf, "PUT", 3) == 0)
+		cur_request = HTTP_REQUEST_HEAD;
+	} else if (strncasecmp(req_buf, "PUT", 3) == 0) {
 		action = &lonely_http::PUT;
-	else if (strncasecmp(req_buf, "DELETE", 6) == 0)
+		cur_request = HTTP_REQUEST_PUT;
+	} else if (strncasecmp(req_buf, "DELETE", 6) == 0) {
 		action = &lonely_http::DELETE;
-	else if (strncasecmp(req_buf, "TRACE", 5) == 0)
+		cur_request = HTTP_REQUEST_DELETE;
+	} else if (strncasecmp(req_buf, "TRACE", 5) == 0) {
 		action = &lonely_http::TRACE;
-	else {
+		cur_request = HTTP_REQUEST_TRACE;
+	} else if (strncasecmp(req_buf, "CONNECT", 7) == 0) {
+		action = &lonely_http::CONNECT;
+		cur_request = HTTP_REQUEST_CONNECT;
+	} else {
 		send_error(HTTP_ERROR_400);
 		return -1;
 	}
@@ -811,6 +863,51 @@ int lonely_http::handle_request()
 			return -1;
 		}
 
+	}
+
+	// Range: bytes 0-7350
+	if ((ptr2 = strcasestr(ptr, "Range:")) != NULL) {
+		if (cur_request != HTTP_REQUEST_GET) {
+			send_error(HTTP_ERROR_416);
+			return -1;
+		}
+
+		ptr2 += 6;
+		for (; ptr2 < last_byte; ++ptr2) {
+			if (*ptr2 != ' ')
+				break;
+		}
+		if (ptr2 >= last_byte) {
+			send_error(HTTP_ERROR_400);
+			return -1;
+		}
+		if (strncmp(ptr2, "bytes=", 6) != 0) {
+			send_error(HTTP_ERROR_416);
+			return -1;
+		}
+		ptr2 += 6;
+		if (ptr2 >= last_byte) {
+			send_error(HTTP_ERROR_400);
+			return -1;
+		}
+		end_ptr = NULL;
+		cur_start_range = strtoul(ptr2, &end_ptr, 10);
+		if (!end_ptr || end_ptr == ptr2 || end_ptr + 1 >= last_byte) {
+			send_error(HTTP_ERROR_400);
+			return -1;
+		}
+		char *end_ptr2 = NULL;
+		cur_end_range = strtoul(end_ptr + 1, &end_ptr2, 10);
+		if (!end_ptr2 || end_ptr2 >= last_byte) {
+			send_error(HTTP_ERROR_400);
+			return -1;
+		}
+		// dont accept further ranges, one is enough
+		if (*end_ptr2 != '\r') {
+			send_error(HTTP_ERROR_416);
+			return -1;
+		}
+		cur_range_requested = 1;
 	}
 
 	return (this->*action)();
