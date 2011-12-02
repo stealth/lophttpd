@@ -4,6 +4,8 @@
 
 #include "multicore.h"
 
+
+
 #ifdef linux
 
 #include <cstdio>
@@ -118,8 +120,11 @@ int setup_multicore(int n)
 
 namespace NS_Misc {
 
+int my_core = 0;
+
 int init_multicore()
 {
+	return 0;
 }
 
 int setup_multicore(int n)
