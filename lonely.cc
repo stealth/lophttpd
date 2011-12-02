@@ -658,7 +658,7 @@ int lonely_http::GET()
 		if (transfer() < 0)
 			send_error(HTTP_ERROR_404);
 	} else if (r == 0 && S_ISDIR(cur_stat.st_mode)) {
-		// No Range: requestes for directories
+		// No Range: requests for directories
 		if (cur_range_requested) {
 			send_error(HTTP_ERROR_416);
 			return -1;

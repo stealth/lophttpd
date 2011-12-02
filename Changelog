@@ -1,3 +1,11 @@
+0.89
+----
++ Fri Dec 2
++ Now supporting Range: headers for partial downloads
++ RFC-complinat HEAD/POST handling
++ Added all other RFC required Methods (CONNECT etc)
++ Successfully tested on FreeBSD8.1
+
 0.88
 ----
 + Tue Nov 29
