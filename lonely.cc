@@ -389,7 +389,7 @@ int lonely_http::transfer()
 		}
 
 		// stat() already happened in GET/POST
-		// the ranges also have been set there
+		// the ranges also have been set there; we rely on that!
 		pf.offset = cur_start_range;
 		pf.copied = 0;
 		pf.left = cur_end_range - cur_start_range;
@@ -658,10 +658,17 @@ int lonely_http::GET()
 		if (transfer() < 0)
 			send_error(HTTP_ERROR_404);
 	} else if (r == 0 && S_ISDIR(cur_stat.st_mode)) {
+		// No Range: requestes for directories
+		if (cur_range_requested) {
+			send_error(HTTP_ERROR_416);
+			return -1;
+		}
 		string o_path = cur_path;
 		// index.html exists? send!
 		cur_path += "/index.html";
 		if (stat(cur_path) == 0 && (S_ISREG(cur_stat.st_mode))) {
+			cur_start_range = 0;
+			cur_end_range = cur_stat.st_size;
 			if (transfer() < 0)
 				send_error(HTTP_ERROR_404);
 		} else {
