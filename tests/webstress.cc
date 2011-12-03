@@ -298,7 +298,11 @@ int webstress::loop()
 
 int main(int argc, char **argv)
 {
-	webstress ws("127.0.0.1", "80", "/zero", 0);
+
+	if (argc < 4)
+		return 1;
+
+	webstress ws(argv[1], argv[2], argv[3], 0);
 
 	if (ws.loop() < 0)
 		cerr<<ws.why()<<endl;

@@ -285,6 +285,15 @@ int lonely::loop()
 			if (pfds[i].revents == 0)
 				continue;
 
+#ifdef linux
+			if ((pfds[i].revents & (POLLERR|POLLHUP|POLLNVAL|POLLRDHUP)) != 0) {
+#else
+			if ((pfds[i].revents & (POLLERR|POLLHUP|POLLNVAL)) != 0) {
+#endif
+				cleanup(i);
+				continue;
+			}
+
 			cur_peer = i;
 			fd2state[i]->alive_time = cur_time;
 
@@ -713,8 +722,10 @@ int lonely_http::GET()
 			send_error(HTTP_ERROR_416);
 			return -1;
 		}
-		if (transfer() < 0)
+		if (transfer() < 0) {
 			send_error(HTTP_ERROR_404);
+			return -1;
+		}
 	} else if (r == 0 && S_ISDIR(cur_stat.st_mode)) {
 		// No Range: requests for directories
 		if (cur_range_requested) {
@@ -727,8 +738,10 @@ int lonely_http::GET()
 		if (stat(cur_path) == 0 && (S_ISREG(cur_stat.st_mode))) {
 			cur_start_range = 0;
 			cur_end_range = cur_stat.st_size;
-			if (transfer() < 0)
+			if (transfer() < 0) {
 				send_error(HTTP_ERROR_404);
+				return -1;
+			}
 		} else {
 			cur_path = o_path;
 			if (send_genindex() < 0)
@@ -765,8 +778,8 @@ int lonely_http::send_error(http_error_code_t e)
 
 int lonely_http::handle_request()
 {
-	char req_buf[2048], *ptr = NULL, *ptr2 = NULL, *end_ptr = NULL, *last_byte = &req_buf[sizeof(req_buf) - 1],
-	     body[2048];
+	char req_buf[2048], *ptr = NULL, *ptr2 = NULL, *end_ptr = NULL,
+	     *last_byte = &req_buf[sizeof(req_buf) - 1], body[2048];
 	int n;
 
 	memset(req_buf, 0, sizeof(req_buf));
