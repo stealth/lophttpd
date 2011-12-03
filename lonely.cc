@@ -322,16 +322,17 @@ int lonely_http::open_log(const string &logfile, const string &method, int core 
 
 int lonely_http::send_http_header()
 {
-	string http_header = "HTTP/1.1 200 OK\r\n"
-	                     "Server: lophttpd\r\n"
-	                     "Date: ";
-	http_header += gmt_date;
+	string http_header = "";
+
 	if (cur_range_requested) {
+		http_header = "HTTP/1.1 206 Partial Content\r\nServer: lophttpd\r\n";
 		char range[256];
-		snprintf(range, sizeof(range), "\r\nRange: bytes=%zu-%zu/%zu",
+		snprintf(range, sizeof(range), "Content-Range: bytes=%zu-%zu/%zu\r\nDate: ",
 		         cur_start_range, cur_end_range, cur_stat.st_size);
 		http_header += range;
-	}
+	} else
+		http_header = "HTTP/1.1 200 OK\r\nServer: lophttpd\r\nDate: ";
+	http_header += gmt_date;
 	http_header += "\r\nContent-Type: %s\r\n"
 	               "Content-Length: %zu\r\n\r\n";
 
@@ -480,9 +481,9 @@ int lonely_http::HEAD()
 		// Do not accept Range: for directories or HTML files
 		if (!S_ISREG(cur_stat.st_mode) || cur_path.find(".html") != string::npos ||
 		    cur_path.find(".htm") != string::npos)
-			head += "Range: none\r\nDate: ";
+			head += "Accept-Ranges: none\r\nDate: ";
 		else
-			head += "Range: bytes\r\nDate: ";
+			head += "Accept-Ranges: bytes\r\nDate: ";
 	}
 
 	head += gmt_date;
