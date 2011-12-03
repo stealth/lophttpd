@@ -268,7 +268,7 @@ int lonely::loop()
 				continue;
 			}
 
-			// more than 30s no data?! Don't time out accept socket.
+			// more than 30s no data?! But don't time out accept socket.
 			if (fd2state[i]->state != STATE_ACCEPTING &&
 			    cur_time - fd2state[i]->alive_time > timeout_alive) {
 				if (pfds[i].revents == 0) {
@@ -276,11 +276,20 @@ int lonely::loop()
 					continue;
 				}
 			}
+			if (fd2state[i]->state == STATE_CLOSING &&
+			    cur_time - fd2state[i]->alive_time > timeout_closing) {
+				cleanup(i);
+				continue;
+			}
 
 			if (pfds[i].revents == 0)
 				continue;
+
 			cur_peer = i;
 			fd2state[i]->alive_time = cur_time;
+
+			// All below states have an event pending, since we wont
+			// be here if revents would be 0
 
 			// new connection ready to accept?
 			if (fd2state[i]->state == STATE_ACCEPTING) {
@@ -316,8 +325,7 @@ int lonely::loop()
 					cleanup(i);
 					continue;
 				}
-			} else if (fd2state[i]->state == STATE_CLOSING &&
-			        fd2state[i]->alive_time >= timeout_closing) {
+			} else if (fd2state[i]->state == STATE_CLOSING) {
 				cleanup(i);
 				continue;
 			} else if (fd2state[i]->state == STATE_TRANSFERING) {
@@ -333,8 +341,11 @@ int lonely::loop()
 			} else if (fd2state[i]->state == STATE_CONNECTED)
 				pfds[i].events = POLLIN;
 
-			if (!fd2state[i]->keep_alive && fd2state[i]->state == STATE_CONNECTED)
+			if (!fd2state[i]->keep_alive && fd2state[i]->state == STATE_CONNECTED) {
+				pfds[i].events = POLLIN;
 				shutdown(i);
+			}
+			pfds[i].revents = 0;
 		}
 		calc_max_fd();
 	}
@@ -817,8 +828,10 @@ int lonely_http::handle_request()
 				return -1;
 			}
 			size_t cl = strtoul(ptr, NULL, 10);
-			if (cl >= sizeof(body))
+			if (cl >= sizeof(body)) {
 				send_error(HTTP_ERROR_414);
+				return -1;
+			}
 			// The body should be right here, we dont mind if stupid senders
 			// send them separately
 			if ((size_t)recv(cur_peer, body, sizeof(body), MSG_DONTWAIT) != cl) {
