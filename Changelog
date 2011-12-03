@@ -1,3 +1,12 @@
+0.90
+----
+
++ Fixed handling of Range: introduced in 0.89
++ Fixed handling of Content-Length
++ added parallel download testing tool
++ fixed shutdown vs. close problems
+
+
 0.89
 ----
 + Fri Dec 2
