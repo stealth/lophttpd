@@ -690,12 +690,15 @@ int lonely_http::send_error(http_error_code_t e)
 {
 	string http_header = "HTTP/1.1 ";
 
-
 	if (e >= HTTP_ERROR_END)
 		e = HTTP_ERROR_400;
 	http_header += http_error_msgs[e];
 	http_header += "\r\nServer: lophttpd\r\nDate: ";
 	http_header += gmt_date;
+
+	if (e == HTTP_ERROR_405)
+		http_header += "\r\nAllow: OPTIONS, GET, HEAD, POST";
+
 	http_header += "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 	writen(cur_peer, http_header.c_str(), http_header.size());
 	fd2state[cur_peer]->keep_alive = 0;
