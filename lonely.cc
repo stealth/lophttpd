@@ -747,9 +747,15 @@ int lonely_http::handle_request()
 	cur_start_range = cur_end_range = 0;
 	cur_range_requested = 0;
 
+	// Have the most likely request type first to skip needless
+	// compares
+	if (strncasecmp(req_buf, "GET", 3) == 0) {
+		action = &lonely_http::GET;
+		cur_request = HTTP_REQUEST_GET;
+
 	// For POST requests, we also require a Content-Length that matches.
 	// The above if() already ensured we have header until "\r\n\r\n"
-	if (strncmp(req_buf, "POST", 4) == 0) {
+	} else if (strncmp(req_buf, "POST", 4) == 0) {
 		if ((ptr = strcasestr(req_buf, "Content-Length:")) != NULL) {
 			for (;ptr < end_ptr; ++ptr) {
 				if (*ptr != ' ')
@@ -777,9 +783,6 @@ int lonely_http::handle_request()
 	} else if (strncasecmp(req_buf, "OPTIONS", 7) == 0) {
 		action = &lonely_http::OPTIONS;
 		cur_request = HTTP_REQUEST_OPTIONS;
-	} else if (strncasecmp(req_buf, "GET", 3) == 0) {
-		action = &lonely_http::GET;
-		cur_request = HTTP_REQUEST_GET;
 	} else if (strncasecmp(req_buf, "HEAD", 4) == 0) {
 		action = &lonely_http::HEAD;
 		cur_request = HTTP_REQUEST_HEAD;
