@@ -807,6 +807,7 @@ int lonely_http::handle_request()
 	// The above if() already ensured we have header until "\r\n\r\n"
 	} else if (strncmp(req_buf, "POST", 4) == 0) {
 		if ((ptr = strcasestr(req_buf, "Content-Length:")) != NULL) {
+			ptr += 15;
 			for (;ptr < end_ptr; ++ptr) {
 				if (*ptr != ' ')
 					break;
