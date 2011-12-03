@@ -203,12 +203,20 @@ int lonely::init(u_int16_t local_port)
 }
 
 
+void lonely::shutdown(int fd)
+{
+	if (fd2state.find(fd) == fd2state.end())
+		return;
+	::shutdown(fd, SHUT_RDWR);
+	fd2state[fd]->state = STATE_CLOSING;
+}
+
+
 void lonely::cleanup(int fd)
 {
-//	assert(pfds[fd].fd == fd);
 	pfds[fd].fd = -1;
-	pfds[fd].events = 0;
-	shutdown(fd, SHUT_RDWR);
+	pfds[fd].events = pfds[fd].revents = 0;
+	close(fd);
 
 	if (fd2state.find(fd) != fd2state.end() && fd2state[fd]) {
 		delete fd2state[fd];
@@ -308,12 +316,16 @@ int lonely::loop()
 					cleanup(i);
 					continue;
 				}
+			} else if (fd2state[i]->state == STATE_CLOSING &&
+			        fd2state[i]->alive_time >= timeout_closing) {
+				cleanup(i);
+				continue;
 			} else if (fd2state[i]->state == STATE_TRANSFERING) {
 				transfer();
 			}
 
 			// do not glue together the above and below if()'s because
-			// transfer() may change state so we need a 2nd if
+			// transfer() may change state so we need a 2nd state-engine walk
 
 			// In case of TRANSFERING we have data to send, so POLLOUT.
 			if (fd2state[i]->state == STATE_TRANSFERING) {
@@ -322,7 +334,7 @@ int lonely::loop()
 				pfds[i].events = POLLIN;
 
 			if (!fd2state[i]->keep_alive && fd2state[i]->state == STATE_CONNECTED)
-				cleanup(i);
+				shutdown(i);
 		}
 		calc_max_fd();
 	}
@@ -332,6 +344,9 @@ int lonely::loop()
 
 // In which timeframe complete header must arrive after 1st byte received
 const uint8_t lonely_http::timeout_header = 3;
+
+// timeout between shutdown() and close()
+const uint8_t lonely::timeout_closing = 3;
 
 // In which timeframe a new request must arrive after connect/transfer
 const uint8_t lonely::timeout_alive = 30;

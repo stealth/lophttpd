@@ -60,9 +60,11 @@ protected:
 
 	std::map<int, struct status *> fd2state;
 
-	static const uint8_t timeout_alive;
+	static const uint8_t timeout_alive, timeout_closing;
 
 	void cleanup(int);
+
+	void shutdown(int);
 
 	void calc_max_fd();
 
@@ -194,7 +196,8 @@ typedef enum {
 	STATE_CONNECTING = 0,
 	STATE_ACCEPTING,
 	STATE_CONNECTED,
-	STATE_TRANSFERING
+	STATE_TRANSFERING,
+	STATE_CLOSING
 } status_t;
 
 struct status {
