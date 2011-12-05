@@ -51,7 +51,7 @@ class webstress {
 public:
 	webstress(const string &h, const string &p, const string &f, bool seq = 0)
 		: host(h), port(p), path(f), err(""), sequential(seq), max_cl(1024),
-		  peers(0), hdr_fail(0), write_fail(0), read_fail(0), pfds(NULL)
+		  peers(0), ests(0), hdr_fail(0), write_fail(0), read_fail(0), pfds(NULL)
 	{
 	}
 
@@ -106,10 +106,12 @@ int webstress::cleanup(int fd)
 	pfds[fd].fd = -1;
 	pfds[fd].events = pfds[fd].revents = 0;
 
+	if (clients[fd]->state > HTTP_STATE_CONNECTING)
+		--ests;
+
 	delete clients[fd];
 	clients[fd] = NULL;
 	--peers;
-	--ests;
 	return 0;
 }
 
@@ -215,6 +217,8 @@ int webstress::loop()
 				continue;
 
 			if ((pfds[i].revents & (POLLERR|POLLHUP|POLLNVAL)) != 0) {
+				++read_fail;
+				print_stat(i);
 				cleanup(i);
 				continue;
 			}
@@ -222,8 +226,11 @@ int webstress::loop()
 			if (clients[i]->state == HTTP_STATE_CONNECTING) {
 				int e = 0;
 				socklen_t elen = sizeof(e);
-				getsockopt(i, SOL_SOCKET, SO_ERROR, &e, &elen);
-				if (e > 0) {
+				if (getsockopt(i, SOL_SOCKET, SO_ERROR, &e, &elen) < 0) {
+					cleanup(i);
+					continue;
+				}
+				if (e != 0) {
 					cleanup(i);
 					continue;
 				}
@@ -282,6 +289,7 @@ int webstress::loop()
 
 			// read content
 			} else if (clients[i]->state == HTTP_STATE_TRANSFERING) {
+				errno = 0;
 				if ((r = read(i, buf, sizeof(buf))) < 0) {
 					++read_fail;
 					cleanup(i);

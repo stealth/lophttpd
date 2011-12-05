@@ -605,7 +605,7 @@ void lonely_http::clear_cache()
 
 	// do not close files in transfer
 	for (map<int, status *>::iterator it = fd2state.begin(); it != fd2state.end(); ++it) {
-		if (it->second->state == STATE_TRANSFERING) {
+		if (it->second && it->second->state == STATE_TRANSFERING) {
 			inode i = {it->second->dev, it->second->ino};
 			dont_close[i] = 1;
 		}
