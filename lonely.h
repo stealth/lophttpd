@@ -123,28 +123,30 @@ typedef enum {
 } http_request_t;
 
 
+struct inode {
+	dev_t dev;
+	ino_t ino;
+};
+
+
 class lonely_http : public lonely {
 private:
 	struct stat cur_stat;
-	std::string cur_path;
 	off_t cur_start_range;
 	size_t cur_end_range;
 	bool cur_range_requested;
 	http_request_t cur_request;
-	std::map<int, struct peer_file> peer2file;
 	log_provider *logger;
 
+	std::map<inode, int> file_cache;
+
 	static const uint8_t timeout_header;
-
-	// stat(2) cache
-	std::map<const std::string, struct stat> file2stat; 
-
-	// open FD cache
-	std::map<const std::string, int> file2fd;
 
 	int OPTIONS();
 
 	int GET();
+
+	int GETPOST();
 
 	int HEAD();
 
@@ -166,15 +168,15 @@ private:
 
 	void log(const std::string &);
 
-	int stat(const std::string &);
+	int stat();
 
-	int open(const std::string &);
+	int open();
 
 public:
 	bool vhosts;
 
 	lonely_http()
-	        : cur_path(""), cur_start_range(0), cur_end_range(0),
+	        : cur_start_range(0), cur_end_range(0),
 		  cur_range_requested(0), cur_request(HTTP_REQUEST_NONE),
 	          logger(NULL), vhosts(0) {};
 
@@ -197,7 +199,8 @@ typedef enum {
 	STATE_ACCEPTING,
 	STATE_CONNECTED,
 	STATE_TRANSFERING,
-	STATE_CLOSING
+	STATE_CLOSING,
+	STATE_ERROR
 } status_t;
 
 struct status {
@@ -205,7 +208,16 @@ struct status {
 	status_t state;
 	time_t alive_time, header_time;
 	bool keep_alive;
+	off_t offset;
+	size_t copied, left;
+	dev_t dev;
+	ino_t ino;
 	struct sockaddr_in sin;
+	std::string path;
+
+	status()
+	 : peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
+	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path("") {};
 };
 
 

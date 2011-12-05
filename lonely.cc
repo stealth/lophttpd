@@ -137,6 +137,12 @@ string http_error_msgs[] = {
 };
 
 
+bool operator<(const inode &i1, const inode &i2)
+{
+	return memcmp(&i1, &i2, sizeof(i1)) < 0;
+}
+
+
 const char *lonely::why()
 {
 	return err.c_str();
@@ -322,7 +328,6 @@ int lonely::loop()
 					cleanup(afd);
 					continue;
 				}
-				memset(fd2state[afd], 0, sizeof(struct status));
 				fd2state[afd]->state = STATE_CONNECTED;
 				fd2state[afd]->alive_time = cur_time;
 				fd2state[afd]->sin = sin;
@@ -406,10 +411,11 @@ int lonely_http::send_http_header()
 	string c_type = "application/data";
 	int i = 0;
 
+	string &p = fd2state[cur_peer]->path;
 	for (i = 0; !content_types[i].extension.empty(); ++i) {
-		if (cur_path.size() <= content_types[i].extension.size())
+		if (p.size() <= content_types[i].extension.size())
 			continue;
-		if (strcasestr(cur_path.c_str() + cur_path.size() - content_types[i].extension.size(),
+		if (strcasestr(p.c_str() + p.size() - content_types[i].extension.size(),
 		               content_types[i].extension.c_str()))
 			break;
 	}
@@ -432,12 +438,13 @@ int lonely_http::send_genindex()
 	http_header += "\r\nContent-Length: %zu\r\n"
                        "Content-Type: text/html\r\n\r\n%s";
 
-	size_t l = http_header.size() + 128 + NS_Misc::dir2index[cur_path].size();
+	string &p = fd2state[cur_peer]->path;
+	size_t l = http_header.size() + 128 + NS_Misc::dir2index[p].size();
 	char *h_buf = new (nothrow) char[l];
 	if (!h_buf)
 		return 0;
-	snprintf(h_buf, l, http_header.c_str(), NS_Misc::dir2index[cur_path].size(),
-	         NS_Misc::dir2index[cur_path].c_str());
+	snprintf(h_buf, l, http_header.c_str(), NS_Misc::dir2index[p].size(),
+	         NS_Misc::dir2index[p].c_str());
 	int r = writen(cur_peer, h_buf, strlen(h_buf));
 	delete [] h_buf;
 	return r;
@@ -446,42 +453,32 @@ int lonely_http::send_genindex()
 
 int lonely_http::transfer()
 {
-	struct peer_file pf;
-
-	if (peer2file.find(cur_peer) == peer2file.end()) {
-		if ((pf.fd = open(cur_path)) < 0) {
-			err = "lonely_http::transfer::open:";
-			err += strerror(errno);
-			return -1;
-		}
-
-		// stat() already happened in GET/POST
-		// the ranges also have been set there; we rely on that!
-		pf.offset = cur_start_range;
-		pf.copied = 0;
-		pf.left = cur_end_range - cur_start_range;
-		pf.path = cur_path;
-
-		send_http_header();
-
-	} else {
-		pf = peer2file[cur_peer];
+	int fd = open();
+	if (fd < 0) {
+		err = "lonely_http::transfer::open:";
+		err += strerror(errno);
+		return -1;
 	}
 
+	// send prefix header if nothing has been sent so far
+	if (fd2state[cur_peer]->copied == 0)
+		send_http_header();
+
 #ifdef linux
-	ssize_t r = sendfile(cur_peer, pf.fd, &pf.offset, pf.left);
+	ssize_t r = sendfile(cur_peer, fd, &fd2state[cur_peer]->offset, fd2state[cur_peer]->left);
 	if (r > 0) {
-		pf.left -= r;
-		pf.copied += r;
+		fd2state[cur_peer]->left -= r;
+		fd2state[cur_peer]->copied += r;
 	}
 #else
 // FreeBSD tested at least
 	off_t sbytes = 0;
-	ssize_t r = sendfile(pf.fd, cur_peer, pf.offset, pf.left, NULL, &sbytes, 0);
+	ssize_t r = sendfile(fd, cur_peer, fd2state[cur_peer]->offset, fd2state[cur_peer]->left,
+	                     NULL, &sbytes, 0);
 	if (sbytes > 0) {
-		pf.offset += sbytes;
-		pf.left -= sbytes;
-		pf.copied += sbytes;
+		fd2state[cur_peer]->offset += sbytes;
+		fd2state[cur_peer]->left -= sbytes;
+		fd2state[cur_peer]->copied += sbytes;
 	}
 #endif
 
@@ -495,21 +492,13 @@ int lonely_http::transfer()
 // On FreeBSD, 0 retval means success
 	if (r < 0) {
 #endif
-		// Error? Kick client and erase from cache
-		peer2file.erase(cur_peer);
 		fd2state[cur_peer]->state = STATE_CONNECTED;
 		fd2state[cur_peer]->keep_alive = 0;
-		if (r < 0) {
-			close(pf.fd);
-			file2fd.erase(pf.path);
-		}
-	} else if (pf.left == 0) {
-		peer2file.erase(cur_peer);
+	} else if (fd2state[cur_peer]->left == 0) {
 		//close(pf.fd); Do not close, due to caching
 		fd2state[cur_peer]->state = STATE_CONNECTED;
 		fd2state[cur_peer]->header_time  = 0;
 	} else {
-		peer2file[cur_peer] = pf;
 		fd2state[cur_peer]->state = STATE_TRANSFERING;
 	}
 
@@ -539,14 +528,15 @@ int lonely_http::HEAD()
 	fd2state[cur_peer]->keep_alive = 0;
 	string head = "";
 
-	if (stat(cur_path) < 0)
+	if (stat() < 0)
 		head = "HTTP/1.1 404 Not Found\r\nDate: ";
 	else {
 		head = "HTTP/1.1 200 OK\r\n";
 
 		// Do not accept Range: for directories or HTML files
-		if (!S_ISREG(cur_stat.st_mode) || cur_path.find(".html") != string::npos ||
-		    cur_path.find(".htm") != string::npos)
+		if (!S_ISREG(cur_stat.st_mode) ||
+		    fd2state[cur_peer]->path.find(".html") != string::npos ||
+		    fd2state[cur_peer]->path.find(".htm") != string::npos)
 			head += "Accept-Ranges: none\r\nDate: ";
 		else
 			head += "Accept-Ranges: bytes\r\nDate: ";
@@ -556,7 +546,7 @@ int lonely_http::HEAD()
 	head += "\r\nServer: lophttpd\r\nConnection: close\r\n\r\n";
 
 	string logstr = "HEAD ";
-	logstr += cur_path;
+	logstr += fd2state[cur_peer]->path;
 	logstr += "\n";
 	log(logstr);
 	return writen(cur_peer, head.c_str(), head.size());
@@ -604,63 +594,62 @@ int lonely_http::PUT()
 
 int lonely_http::POST()
 {
-	return GET();
+	return GETPOST();
 }
 
 
 // for sighandler if new files appear in webroot
 void lonely_http::clear_cache()
 {
-	map<int, int> dont_close;
-	file2stat.clear();
+	map<inode, int> dont_close;
 
-	// dont close files inbetween transfer
-	for (map<int, struct peer_file>::iterator i = peer2file.begin(); i != peer2file.end(); ++i)
-		dont_close[i->second.fd] = 1;
+	// do not close files in transfer
+	for (map<int, status *>::iterator it = fd2state.begin(); it != fd2state.end(); ++it) {
+		if (it->second->state == STATE_TRANSFERING) {
+			inode i = {it->second->dev, it->second->ino};
+			dont_close[i] = 1;
+		}
+	}
 
-	for (map<string, int>::iterator i = file2fd.begin(); i != file2fd.end(); ++i) {
-		if (dont_close.find(i->second) == dont_close.end()) {
-			close(i->second);
-			file2fd.erase(i);
+	for (map<inode, int>::iterator it = file_cache.begin(); it != file_cache.end(); ++it) {
+		if (dont_close.find(it->first) == dont_close.end()) {
+			close(it->second);
+			file_cache.erase(it);
 		}
 	}
 }
 
 
-int lonely_http::stat(const string &path)
+int lonely_http::stat()
 {
-	int r = 0;
-	memset(&cur_stat, 0, sizeof(cur_stat));
-
-	if (file2stat.find(path) != file2stat.end()) {
-		cur_stat = file2stat[path];
-	} else {
-		r = ::stat(path.c_str(), &cur_stat);
-		// do not cache failures
-		if (r == 0)
-			file2stat[path] = cur_stat;
+	int r = ::stat(fd2state[cur_peer]->path.c_str(), &cur_stat);
+	if (r == 0) {
+		fd2state[cur_peer]->dev = cur_stat.st_dev;
+		fd2state[cur_peer]->ino = cur_stat.st_ino;
 	}
-
 	return r;
 }
 
 
-int lonely_http::open(const string &path)
+int lonely_http::open()
 {
 	int fd = -1;
 
-	if (file2fd.find(path) != file2fd.end()) {
-		fd = file2fd[path];
+	struct inode i = {fd2state[cur_peer]->dev, fd2state[cur_peer]->ino};
+
+	map<inode, int>::iterator it = file_cache.find(i);
+	if (it != file_cache.end()) {
+		fd = it->second;
 	} else {
-		fd = ::open(path.c_str(), O_RDONLY);
+		fd = ::open(fd2state[cur_peer]->path.c_str(), O_RDONLY);
 		if (fd >= 0) {
-			file2fd[path] = fd;
+			file_cache[i] = fd;
 		// Too many open files? Drop caches
 		} else if (errno == EMFILE || errno == ENFILE) {
 			clear_cache();
-			fd = ::open(path.c_str(), O_RDONLY);
+			fd = ::open(fd2state[cur_peer]->path.c_str(), O_RDONLY);
 			if (fd >= 0)
-				file2fd[path] = fd;
+				file_cache[i] = fd;
 		}
 	}
 	return fd;
@@ -669,21 +658,23 @@ int lonely_http::open(const string &path)
 
 int lonely_http::de_escape_path()
 {
-	if (cur_path.find("%") == string::npos)
+	string &p = fd2state[cur_peer]->path;
+	if (p.find("%") == string::npos)
 		return 0;
+
 	string tmp;
 	tmp.resize(16);
 	size_t pos = 0;
 	unsigned char c = 0, c1, c2;
 	tmp = "";
-	while ((pos = cur_path.find("%")) != string::npos) {
+	while ((pos = p.find("%")) != string::npos) {
 		// must have at least 2 chars after % escape
-		if (pos > cur_path.size() - 3)
+		if (pos > p.size() - 3)
 			return -1;
-		if (!isxdigit(cur_path[pos + 1]) || !isxdigit(cur_path[pos + 2]))
+		if (!isxdigit(p[pos + 1]) || !isxdigit(p[pos + 2]))
 			return -1;
-		c1 = toupper(cur_path[pos + 1]);
-		c2 = toupper(cur_path[pos + 2]);
+		c1 = toupper(p[pos + 1]);
+		c2 = toupper(p[pos + 2]);
 		if (c1 >= 'A' && c1 <= 'F')
 			c = (10 + c1 - 'A')<<4;
 		else
@@ -693,26 +684,32 @@ int lonely_http::de_escape_path()
 		else
 			c += (c2 - '0');
 		tmp.push_back(c);
-		cur_path.replace(pos, 3, tmp, 0, 1);
+		p.replace(pos, 3, tmp, 0, 1);
 		tmp = "";
 	}
 	return 0;
 }
 
 
-int lonely_http::GET()
+int lonely_http::GETPOST()
 {
-	string logstr = "GET ";
-	logstr += cur_path;
+	string logstr = "";
+
+	if (cur_request == HTTP_REQUEST_GET) {
+		logstr = "GET ";
+	} else {
+		logstr = "POST ";
+	}
+
 	logstr += "\n";
+	logstr += fd2state[cur_peer]->path;
 	log(logstr);
 
 	if (de_escape_path() < 0)
 		return send_error(HTTP_ERROR_400);
 
 	int r = 0;
-
-	if ((r = stat(cur_path)) == 0 && (S_ISREG(cur_stat.st_mode))) {
+	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode))) {
 		if (cur_end_range == 0)
 			cur_end_range = cur_stat.st_size;
 		if (cur_start_range < 0 ||
@@ -722,6 +719,11 @@ int lonely_http::GET()
 			send_error(HTTP_ERROR_416);
 			return -1;
 		}
+
+		fd2state[cur_peer]->offset = cur_start_range;
+		fd2state[cur_peer]->copied = 0;
+		fd2state[cur_peer]->left = cur_end_range - cur_start_range;
+
 		if (transfer() < 0) {
 			send_error(HTTP_ERROR_404);
 			return -1;
@@ -732,18 +734,19 @@ int lonely_http::GET()
 			send_error(HTTP_ERROR_416);
 			return -1;
 		}
-		string o_path = cur_path;
+		string o_path = fd2state[cur_peer]->path;
 		// index.html exists? send!
-		cur_path += "/index.html";
-		if (stat(cur_path) == 0 && (S_ISREG(cur_stat.st_mode))) {
-			cur_start_range = 0;
-			cur_end_range = cur_stat.st_size;
+		fd2state[cur_peer]->path += "/index.html";
+		if (stat() == 0 && (S_ISREG(cur_stat.st_mode))) {
+			fd2state[cur_peer]->offset = 0;
+			fd2state[cur_peer]->copied = 0;
+			fd2state[cur_peer]->left = cur_stat.st_size;
 			if (transfer() < 0) {
 				send_error(HTTP_ERROR_404);
 				return -1;
 			}
 		} else {
-			cur_path = o_path;
+			fd2state[cur_peer]->path = o_path;
 			if (send_genindex() < 0)
 				return -1;
 		}
@@ -753,6 +756,12 @@ int lonely_http::GET()
 	}
 
 	return 0;
+}
+
+
+int lonely_http::GET()
+{
+	return GETPOST();
 }
 
 
@@ -894,7 +903,7 @@ int lonely_http::handle_request()
 	}
 	end_ptr[1] = 0;
 
-	cur_path = ptr;
+	fd2state[cur_peer]->path = ptr;
 
 	ptr = end_ptr + 2; // rest of header
 	if (ptr > last_byte) {
@@ -938,12 +947,12 @@ int lonely_http::handle_request()
 			}
 			// If already requesting vhost files (genindex), then, do not prepend
 			// vhost path again
-			if (!strstr(cur_path.c_str(), "vhost")) {
-				string tmps = cur_path;
-				cur_path = "/vhost";
-				cur_path += ptr2;
+			if (!strstr(fd2state[cur_peer]->path.c_str(), "vhost")) {
+				string tmps = fd2state[cur_peer]->path;
+				fd2state[cur_peer]->path = "/vhost";
+				fd2state[cur_peer]->path += ptr2;
 				if (tmps != "/")
-					cur_path += tmps;
+					fd2state[cur_peer]->path += tmps;
 			}
 		} else {
 			send_error(HTTP_ERROR_400);

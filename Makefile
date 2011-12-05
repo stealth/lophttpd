@@ -1,4 +1,4 @@
-CXX=c++ -Wall -O2
+CXX=c++ -Wall -O2 -g
 LD=c++
 
 all: lhttpd

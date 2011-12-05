@@ -33,7 +33,7 @@ class webstress {
 
 	string host, port, path, err;
 	bool sequential;
-	int max_cl, peers, hdr_fail, write_fail, read_fail;
+	int max_cl, peers, ests, hdr_fail, write_fail, read_fail;
 	time_t now;
 
 	pollfd *pfds;
@@ -46,7 +46,7 @@ class webstress {
 
 	map<int, client *> clients;
 
-	static const int TIMEOUT = 5;
+	static const int TIMEOUT = 30;
 
 public:
 	webstress(const string &h, const string &p, const string &f, bool seq = 0)
@@ -109,6 +109,7 @@ int webstress::cleanup(int fd)
 	delete clients[fd];
 	clients[fd] = NULL;
 	--peers;
+	--ests;
 	return 0;
 }
 
@@ -118,8 +119,9 @@ void webstress::print_stat(int fd)
 	if (now - clients[fd]->start_time == 0)
 		--clients[fd]->start_time;
 
-	printf("[%05u][rf=%08u][hdrf=%08u][wf=%09u][%s][%f MB/s]\n", peers, 
-	       read_fail, hdr_fail, write_fail,
+	printf("[#P=%05u][#EST=%05u][rf=%05u][hdrf=%05u][wf=%05u][cnt=%08u][%s][%f MB/s]\n",
+	       peers, ests,
+	       read_fail, hdr_fail, write_fail, clients[fd]->obtained,
 	       path.c_str(),
 	       (double)clients[fd]->content_length/(now - clients[fd]->start_time)/(1024*1024));
 }
@@ -212,6 +214,11 @@ int webstress::loop()
 			if (pfds[i].revents == 0)
 				continue;
 
+			if ((pfds[i].revents & (POLLERR|POLLHUP|POLLNVAL)) != 0) {
+				cleanup(i);
+				continue;
+			}
+
 			if (clients[i]->state == HTTP_STATE_CONNECTING) {
 				int e = 0;
 				socklen_t elen = sizeof(e);
@@ -220,6 +227,7 @@ int webstress::loop()
 					cleanup(i);
 					continue;
 				}
+				++ests;
 				if (writen(i, GET, GET_len) <= 0) {
 					++write_fail;
 					cleanup(i);
@@ -267,6 +275,8 @@ int webstress::loop()
 					clients[i]->content_length = strtoul(ptr, NULL, 10);
 				} else
 					clients[i]->content_length = (size_t)-1;
+
+				clients[i]->obtained = 0;
 				pfds[i].revents = 0;
 				pfds[i].events = POLLIN;
 
