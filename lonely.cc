@@ -701,8 +701,8 @@ int lonely_http::GETPOST()
 		logstr = "POST ";
 	}
 
-	logstr += "\n";
 	logstr += fd2state[cur_peer]->path;
+	logstr += "\n";
 	log(logstr);
 
 	if (de_escape_path() < 0)
