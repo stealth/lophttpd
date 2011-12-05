@@ -254,7 +254,7 @@ int lonely::loop()
 
 	for (;;) {
 		// 0 means timeout which we also need to handle
-		if (poll(pfds, max_fd + 1, 30*1000) < 0)
+		if (poll(pfds, max_fd + 1, 3*1000) < 0)
 			continue;
 
 		memset(&tv, 0, sizeof(tv));
