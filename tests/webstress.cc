@@ -201,7 +201,7 @@ int webstress::loop()
 	         host.c_str());
 	size_t GET_len = strlen(GET);
 
-	int sock = 0, fl = 0;
+	int sock = 0;
 	for (;;) {
 		now = time(NULL);
 		while (peers + 10 < max_cl) {
@@ -210,8 +210,7 @@ int webstress::loop()
 				err += strerror(errno);
 				return -1;
 			}
-			fl = fcntl(sock, F_GETFL);
-			fcntl(sock, F_SETFL, fl|O_NONBLOCK);
+			fcntl(sock, F_SETFL, O_RDWR|O_NONBLOCK);
 			if (connect(sock, ai->ai_addr, ai->ai_addrlen) < 0 &&
 			    errno != EINPROGRESS) {
 				err = "webstress::loop::";
@@ -232,8 +231,10 @@ int webstress::loop()
 				max_fd = sock;
 		}
 
-		if (poll(pfds, max_fd + 1, 100) < 0)
+		if (poll(pfds, max_fd + 1, 10000) < 0)
 			continue;
+
+		now = time(NULL);
 
 		// starts at most at FD 3
 		for (int i = 3; i <= max_fd ; ++i) {

@@ -261,6 +261,9 @@ void lonely::calc_max_fd()
 int lonely::loop()
 {
 	int i = 0;
+#ifndef linux
+	int flags = O_RDWR;
+#endif
 	struct sockaddr_in sin;
 	socklen_t slen = sizeof(sin);
 	struct tm tm;
@@ -321,7 +324,11 @@ int lonely::loop()
 
 				int afd = 0;
 				for (;;) {
+#ifdef linux
+					afd = accept4(i, (struct sockaddr *)&sin, &slen, SOCK_NONBLOCK);
+#else
 					afd = accept(i, (struct sockaddr *)&sin, &slen);
+#endif
 					if (afd < 0) {
 						if (errno == EMFILE || errno == ENFILE)
 							clear_cache();
@@ -330,12 +337,12 @@ int lonely::loop()
 					pfds[afd].fd = afd;
 					pfds[afd].events = POLLIN;
 					pfds[afd].revents = 0;
-#ifdef GETFL_OPTIMIZATION
-					int flags = O_RDWR;
-#else
-					int flags = fcntl(afd, F_GETFL);
+#ifndef linux
+#ifndef GETFL_OPTIMIZATION
+					flags = fcntl(afd, F_GETFL);
 #endif
 					fcntl(afd, F_SETFL, flags|O_NONBLOCK);
+#endif
 
 					// We reuse preveiously allocated but 'cleanup'ed memory to save
 					// speed for lotsa new/delete calls on heavy traffic
@@ -418,7 +425,7 @@ int lonely_http::open_log(const string &logfile, const string &method, int core 
 
 int lonely_http::send_http_header()
 {
-	string http_header = "";
+	string http_header;
 
 	if (cur_range_requested) {
 		http_header = "HTTP/1.1 206 Partial Content\r\nServer: lophttpd\r\n";
@@ -497,8 +504,12 @@ int lonely_http::transfer()
 			return -1;
 	}
 
+	size_t n = fd2state[cur_peer]->left;
+	if (n > 0x1000)
+		n = 0x1000;
+
 #ifdef linux
-	ssize_t r = sendfile(cur_peer, fd, &fd2state[cur_peer]->offset, fd2state[cur_peer]->left);
+	ssize_t r = sendfile(cur_peer, fd, &fd2state[cur_peer]->offset, n);
 	if (r > 0) {
 		fd2state[cur_peer]->left -= r;
 		fd2state[cur_peer]->copied += r;
@@ -506,7 +517,7 @@ int lonely_http::transfer()
 #else
 // FreeBSD tested at least
 	off_t sbytes = 0;
-	ssize_t r = sendfile(fd, cur_peer, fd2state[cur_peer]->offset, fd2state[cur_peer]->left,
+	ssize_t r = sendfile(fd, cur_peer, fd2state[cur_peer]->offset, n,
 	                     NULL, &sbytes, 0);
 	if (sbytes > 0) {
 		fd2state[cur_peer]->offset += sbytes;
@@ -594,7 +605,7 @@ int lonely_http::OPTIONS()
 	string reply = "HTTP/1.1 200 OK\r\nDate: ";
 	reply += gmt_date;
 	reply += "\r\nServer: lophttpd\r\nContent-Length: 0\r\nAllow: OPTIONS, GET, HEAD, POST\r\n\r\n";
-	log("OPTIONS");
+	log("OPTIONS\n");
 	if (writen(cur_peer, reply.c_str(), reply.size()) <= 0)
 		return -1;
 	return 0;
@@ -603,28 +614,28 @@ int lonely_http::OPTIONS()
 
 int lonely_http::DELETE()
 {
-	log("DELETE");
+	log("DELETE\n");
 	return send_error(HTTP_ERROR_405);
 }
 
 
 int lonely_http::CONNECT()
 {
-	log("CONNECT");
+	log("CONNECT\n");
 	return send_error(HTTP_ERROR_405);
 }
 
 
 int lonely_http::TRACE()
 {
-	log("TRACE");
+	log("TRACE\n");
 	return send_error(HTTP_ERROR_501);
 }
 
 
 int lonely_http::PUT()
 {
-	log("PUT");
+	log("PUT\n");
 	return send_error(HTTP_ERROR_405);
 }
 
@@ -639,6 +650,8 @@ int lonely_http::POST()
 // for sighandler if new files appear in webroot
 void lonely_http::clear_cache()
 {
+	stat_cache.clear();
+
 	map<inode, int> dont_close;
 
 	// do not close files in transfer
@@ -662,11 +675,44 @@ void lonely_http::clear_cache()
 
 int lonely_http::stat()
 {
-	int r = ::stat(fd2state[cur_peer]->path.c_str(), &cur_stat);
+	const string &p = fd2state[cur_peer]->path;
+	int r = 0;
+
+#ifdef STAT_CACHE
+	bool cacheit = 0;
+
+	// do not cache stupid filenames which most likely is an attack
+	// to exhaust our cache memory with combinations of ..//../foo etc.
+	if (p.find("..") == string::npos)
+		if (p.find("//") == string::npos)
+			cacheit = 1;
+
+	map<string, struct stat>::iterator it;
+
+	if (!cacheit)
+		r = ::stat(p.c_str(), &cur_stat);
+	else {
+		it = stat_cache.find(p);
+		if (it != stat_cache.end()) {
+			cur_stat = it->second;
+			cacheit = 0;
+		} else
+			r = ::stat(p.c_str(), &cur_stat);
+	}
+
+	if (r == 0) {
+		fd2state[cur_peer]->dev = cur_stat.st_dev;
+		fd2state[cur_peer]->ino = cur_stat.st_ino;
+		if (cacheit)
+			stat_cache[p] = cur_stat;
+	}
+#else
+	r = ::stat(p.c_str(), &cur_stat);
 	if (r == 0) {
 		fd2state[cur_peer]->dev = cur_stat.st_dev;
 		fd2state[cur_peer]->ino = cur_stat.st_ino;
 	}
+#endif
 	return r;
 }
 
@@ -733,7 +779,7 @@ int lonely_http::de_escape_path()
 
 int lonely_http::GETPOST()
 {
-	string logstr = "";
+	string logstr;
 
 	if (cur_request == HTTP_REQUEST_GET) {
 		logstr = "GET ";

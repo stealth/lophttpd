@@ -139,6 +139,7 @@ private:
 	log_provider *logger;
 
 	std::map<inode, int> file_cache;
+	std::map<std::string, struct stat> stat_cache;
 
 	static const uint8_t timeout_header;
 
