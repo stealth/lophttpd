@@ -271,7 +271,7 @@ int lonely::loop()
 			if (pfds[i].fd == -1)
 				continue;
 			if (fd2state.find(i) == fd2state.end() || !fd2state[i] ||
-			    fd2state[i]->state = STATE_NONE) {
+			    fd2state[i]->state == STATE_NONE) {
 				cleanup(i);
 				continue;
 			}
