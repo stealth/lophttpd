@@ -318,37 +318,44 @@ int lonely::loop()
 			if (fd2state[i]->state == STATE_ACCEPTING) {
 				pfds[i].revents = 0;
 				pfds[i].events = POLLIN|POLLOUT;
-				int afd = accept(pfds[i].fd, (struct sockaddr *)&sin, &slen);
-				if (afd < 0) {
-					if (errno == EMFILE || errno == ENFILE)
-						clear_cache();
-					continue;
-				}
-				pfds[afd].fd = afd;
-				pfds[afd].events = POLLIN;
-				pfds[afd].revents = 0;
+
+				int afd = 0;
+				for (;;) {
+					afd = accept(i, (struct sockaddr *)&sin, &slen);
+					if (afd < 0) {
+						if (errno == EMFILE || errno == ENFILE)
+							clear_cache();
+						break;
+					}
+					pfds[afd].fd = afd;
+					pfds[afd].events = POLLIN;
+					pfds[afd].revents = 0;
 #ifdef GETFL_OPTIMIZATION
-				int flags = O_RDWR;
+					int flags = O_RDWR;
 #else
-				int flags = fcntl(afd, F_GETFL);
+					int flags = fcntl(afd, F_GETFL);
 #endif
-				fcntl(afd, F_SETFL, flags|O_NONBLOCK);
+					fcntl(afd, F_SETFL, flags|O_NONBLOCK);
 
-				// We reuse preveiously allocated but 'cleanup'ed memory to save
-				// speed for lotsa new/delete calls on heavy traffic
-				if (!fd2state[afd])
-					fd2state[afd] = new (nothrow) struct status;
+					// We reuse preveiously allocated but 'cleanup'ed memory to save
+					// speed for lotsa new/delete calls on heavy traffic
+					if (!fd2state[afd])
+						fd2state[afd] = new (nothrow) struct status;
 
-				if (!fd2state[afd]) {
-					cleanup(afd);
-					continue;
+					if (!fd2state[afd]) {
+						cleanup(afd);
+						continue;
+					}
+					fd2state[afd]->state = STATE_CONNECTED;
+					fd2state[afd]->alive_time = cur_time;
+					fd2state[afd]->sin = sin;
+
+					if (afd > max_fd)
+						max_fd = afd;
 				}
-				fd2state[afd]->state = STATE_CONNECTED;
-				fd2state[afd]->alive_time = cur_time;
-				fd2state[afd]->sin = sin;
-
-				if (afd > max_fd)
-					max_fd = afd;
+				// There is nothing more to do for the accept socket;
+				// just continue with the other sockets
+				continue;
 			} else if (fd2state[i]->state == STATE_CONNECTED) {
 				if (handle_request() < 0) {
 					cleanup(i);

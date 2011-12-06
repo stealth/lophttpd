@@ -128,18 +128,18 @@ int log_provider::mmap_log(const string &msg)
 			return -1;
 		}
 		if (fstat(log_fd, &st) < 0) {
-			err = "log_provider::open_log::fstat:";
+			err = "log_provider::mmap_log::fstat:";
 			err += strerror(errno);
 			return -1;
 		}
 		if (ftruncate(log_fd, st.st_size + log_size) < 0) {
-			err = "log_provider::open_log::ftruncate:";
+			err = "log_provider::mmap_log::ftruncate:";
 			err += strerror(errno);
 			return -1;
 		}
 		if ((log_area = mmap(NULL, log_size, PROT_READ|PROT_WRITE, MAP_SHARED,
 			log_fd, st.st_size)) == (void *)-1) {
-			err = "log_provider::open_log::mmap:";
+			err = "log_provider::mmap_log::mmap:";
 			err += strerror(errno);
 			return -1;
 		}
