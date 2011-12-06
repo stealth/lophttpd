@@ -73,7 +73,7 @@ protected:
 	virtual void clear_cache() = 0;
 
 public:
-	lonely() : cur_time(0) {};
+	lonely() : first_fd(0), max_fd(0), cur_peer(-1), cur_time(0), err(""), fd2state(NULL) {};
 
 	virtual ~lonely() { delete [] pfds; };
 

@@ -33,7 +33,7 @@ class webstress {
 
 	string host, port, path, err;
 	bool sequential;
-	int max_cl, peers, ests, hdr_fail, write_fail, read_fail, to_fail, hup_fail, max_fd;
+	int max_cl, peers, ever, ests, success, hdr_fail, write_fail, read_fail, to_fail, hup_fail, max_fd;
 	time_t now;
 
 	pollfd *pfds;
@@ -51,7 +51,7 @@ class webstress {
 public:
 	webstress(const string &h, const string &p, const string &f, bool seq = 0)
 		: host(h), port(p), path(f), err(""), sequential(seq), max_cl(1024),
-		  peers(0), ests(0), hdr_fail(0), write_fail(0), read_fail(0), 
+		  peers(0), ever(0), ests(0), success(0), hdr_fail(0), write_fail(0), read_fail(0), 
 	          to_fail(0), hup_fail(0), max_fd(0), pfds(NULL)
 	{
 	}
@@ -140,8 +140,8 @@ void webstress::print_stat(int fd)
 		break;
 	}
 
-	printf("(%c)[#P=%05u][#EST=%05u][rf=%05u][hdrf=%05u][wf=%05u][tf=%05u][hf=%05u][cnt=%08u][%s][%f MB/s]\n",
-	       s, peers, ests,
+	printf("(%c)[#=%08u][#S=%05u][#P=%05u][#EST=%05u][rf=%05u][hdrf=%05u][wf=%05u][tf=%05u][hf=%05u][cnt=%08u][%s][%f MB/s]\n",
+	       s, ever, success, peers, ests,
 	       read_fail, hdr_fail, write_fail, to_fail, hup_fail, clients[fd]->obtained,
 	       path.c_str(),
 	       (double)clients[fd]->content_length/(now - clients[fd]->start_time)/(1024*1024));
@@ -227,7 +227,7 @@ int webstress::loop()
 			pfds[sock].fd = sock;
 			pfds[sock].events = POLLIN|POLLOUT;
 			pfds[sock].revents = 0;
-			++peers;
+			++peers; ++ever;
 			if (sock > max_fd)
 				max_fd = sock;
 		}
@@ -336,6 +336,8 @@ int webstress::loop()
 				}
 				clients[i]->obtained += r;
 				if (clients[i]->obtained == clients[i]->content_length || r == 0) {
+					if (r != 0)
+						++success;
 					print_stat(i);
 					cleanup(i);
 					continue;

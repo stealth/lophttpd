@@ -112,14 +112,17 @@ int bind_local(int sock, u_int16_t port, bool do_listen, int tries)
 	}
 
 	if (do_listen) {
-		if (listen(sock, SOMAXCONN) < 0) {
-			error = "NS_Socket::bind_local::listen: ";
-			error += strerror(errno);
-			return -1;
+		if (listen(sock, 10000) < 0) {
+			if (listen(sock, SOMAXCONN) < 0) {
+				error = "NS_Socket::bind_local::listen: ";
+				error += strerror(errno);
+				return -1;
+			}
 		}
 	}
 	return 0;
 }
+
 
 int tcp_connect_nb(struct sockaddr_in sin, u_int16_t local_port)
 {
