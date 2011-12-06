@@ -48,9 +48,9 @@
 class lonely {
 private:
 	struct pollfd *pfds;
-	int first_fd, max_fd;
 
 protected:
+	int first_fd, max_fd;
 	int cur_peer;
 	time_t cur_time;
 
@@ -58,7 +58,7 @@ protected:
 
 	std::string err;
 
-	std::map<int, struct status *> fd2state;
+	struct status **fd2state;
 
 	static const uint8_t timeout_alive, timeout_closing;
 

@@ -181,6 +181,13 @@ int lonely::init(u_int16_t local_port)
 	int flags = fcntl(sock_fd, F_GETFL);
 	fcntl(sock_fd, F_SETFL, flags|O_NONBLOCK);
 
+	fd2state = new (nothrow) struct status*[rl.rlim_cur];
+	if (!fd2state) {
+		err = "loneley::init::OOM";
+		return -1;
+	}
+	memset(fd2state, 0, rl.rlim_cur*sizeof(struct status*));
+
 	pfds = new (nothrow) pollfd[rl.rlim_cur];
 	if (!pfds) {
 		err = "loneley::init::OOM";
@@ -211,8 +218,11 @@ int lonely::init(u_int16_t local_port)
 
 void lonely::shutdown(int fd)
 {
-	if (fd2state.find(fd) == fd2state.end())
+	if (fd < 0)
 		return;
+	if (!fd2state[fd])
+		return;
+
 	::shutdown(fd, SHUT_RDWR);
 	fd2state[fd]->state = STATE_CLOSING;
 }
@@ -220,11 +230,14 @@ void lonely::shutdown(int fd)
 
 void lonely::cleanup(int fd)
 {
+	if (fd < 0)
+		return;
+
 	pfds[fd].fd = -1;
 	pfds[fd].events = pfds[fd].revents = 0;
 	close(fd);
 
-	if (fd2state.find(fd) != fd2state.end() && fd2state[fd]) {
+	if (fd2state[fd]) {
 		fd2state[fd]->peer_fd = -1;
 		fd2state[fd]->path.clear();
 		fd2state[fd]->state = STATE_NONE;
@@ -270,11 +283,8 @@ int lonely::loop()
 		for (i = first_fd; i <= max_fd; ++i) {
 			if (pfds[i].fd == -1)
 				continue;
-			if (fd2state.find(i) == fd2state.end() || !fd2state[i] ||
-			    fd2state[i]->state == STATE_NONE) {
-				cleanup(i);
+			if (!fd2state[i] || fd2state[i]->state == STATE_NONE)
 				continue;
-			}
 
 			// more than 30s no data?! But don't time out accept socket.
 			if (fd2state[i]->state != STATE_ACCEPTING &&
@@ -625,10 +635,12 @@ void lonely_http::clear_cache()
 	map<inode, int> dont_close;
 
 	// do not close files in transfer
-	for (map<int, status *>::iterator it = fd2state.begin(); it != fd2state.end(); ++it) {
-		if (it->second && it->second->state == STATE_TRANSFERING) {
-			inode i = {it->second->dev, it->second->ino};
-			dont_close[i] = 1;
+	for (int i = 0; i <= max_fd; ++i) {
+		if (fd2state[i]) {
+			if (fd2state[i]->state == STATE_TRANSFERING) {
+				inode ino = {fd2state[i]->dev, fd2state[i]->ino};
+				dont_close[ino] = 1;
+			}
 		}
 	}
 
