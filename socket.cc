@@ -198,7 +198,7 @@ int writen(int fd, const void *buf, size_t len)
 	char *ptr = (char*)buf;
 
 	while (len > 0) {
-		if ((n = write(fd, ptr+o, len)) < 0)
+		if ((n = write(fd, ptr+o, len)) <= 0)
 			return n;
 		len -= n;
 		o += n;

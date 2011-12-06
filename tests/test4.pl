@@ -2,12 +2,14 @@
 
 use IO::Socket;
 
-my $peer = new IO::Socket::INET->new(PeerAddr => '127.0.0.1',
+my $host = shift || "127.0.0.1";
+
+my $peer = new IO::Socket::INET->new(PeerAddr => $host,
 	PeerPort => 80,
 	Proto => 'tcp') or die $!;
 
 my $msg=<<EOH;
-GET /testfile HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n
+GET /testfile HTTP/1.1\r\nHost: $host\r\n\r\n
 EOH
 
 print $peer $msg;

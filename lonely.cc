@@ -339,7 +339,10 @@ int lonely::loop()
 				cleanup(i);
 				continue;
 			} else if (fd2state[i]->state == STATE_TRANSFERING) {
-				transfer();
+				if (transfer() < 0) {
+					cleanup(i);
+					continue;
+				}
 			}
 
 			// do not glue together the above and below if()'s because
@@ -420,7 +423,9 @@ int lonely_http::send_http_header()
 	snprintf(h_buf, sizeof(h_buf), http_header.c_str(), c_type.c_str(),
 	         cur_end_range - cur_start_range);
 
-	writen(cur_peer, h_buf, strlen(h_buf));
+	if (writen(cur_peer, h_buf, strlen(h_buf)) <= 0)
+		return -1;
+
 	return 0;
 }
 
@@ -443,6 +448,10 @@ int lonely_http::send_genindex()
 	         NS_Misc::dir2index[p].c_str());
 	int r = writen(cur_peer, h_buf, strlen(h_buf));
 	delete [] h_buf;
+
+	if (r <= 0)
+		return -1;
+
 	return r;
 }
 
@@ -457,8 +466,10 @@ int lonely_http::transfer()
 	}
 
 	// send prefix header if nothing has been sent so far
-	if (fd2state[cur_peer]->copied == 0)
-		send_http_header();
+	if (fd2state[cur_peer]->copied == 0) {
+		if (send_http_header() < 0)
+			return -1;
+	}
 
 #ifdef linux
 	ssize_t r = sendfile(cur_peer, fd, &fd2state[cur_peer]->offset, fd2state[cur_peer]->left);
@@ -545,7 +556,10 @@ int lonely_http::HEAD()
 	logstr += fd2state[cur_peer]->path;
 	logstr += "\n";
 	log(logstr);
-	return writen(cur_peer, head.c_str(), head.size());
+
+	if (writen(cur_peer, head.c_str(), head.size()) <= 0)
+		return -1;
+	return 0;
 }
 
 
@@ -555,7 +569,9 @@ int lonely_http::OPTIONS()
 	reply += gmt_date;
 	reply += "\r\nServer: lophttpd\r\nContent-Length: 0\r\nAllow: OPTIONS, GET, HEAD, POST\r\n\r\n";
 	log("OPTIONS");
-	return writen(cur_peer, reply.c_str(), reply.size());
+	if (writen(cur_peer, reply.c_str(), reply.size()) <= 0)
+		return -1;
+	return 0;
 }
 
 
@@ -712,24 +728,19 @@ int lonely_http::GETPOST()
 		    cur_start_range >= cur_stat.st_size ||
 		    cur_end_range > (size_t)cur_stat.st_size ||
 		    (size_t)cur_start_range >= cur_end_range) {
-			send_error(HTTP_ERROR_416);
-			return -1;
+			return send_error(HTTP_ERROR_416);
 		}
 
 		fd2state[cur_peer]->offset = cur_start_range;
 		fd2state[cur_peer]->copied = 0;
 		fd2state[cur_peer]->left = cur_end_range - cur_start_range;
 
-		if (transfer() < 0) {
-			send_error(HTTP_ERROR_404);
-			return -1;
-		}
+		if (transfer() < 0)
+			return send_error(HTTP_ERROR_404);
 	} else if (r == 0 && S_ISDIR(cur_stat.st_mode)) {
 		// No Range: requests for directories
-		if (cur_range_requested) {
-			send_error(HTTP_ERROR_416);
-			return -1;
-		}
+		if (cur_range_requested)
+			return send_error(HTTP_ERROR_416);
 		string o_path = fd2state[cur_peer]->path;
 		// index.html exists? send!
 		fd2state[cur_peer]->path += "/index.html";
@@ -737,18 +748,15 @@ int lonely_http::GETPOST()
 			fd2state[cur_peer]->offset = 0;
 			fd2state[cur_peer]->copied = 0;
 			fd2state[cur_peer]->left = cur_stat.st_size;
-			if (transfer() < 0) {
-				send_error(HTTP_ERROR_404);
-				return -1;
-			}
+			if (transfer() < 0)
+				return send_error(HTTP_ERROR_404);
 		} else {
 			fd2state[cur_peer]->path = o_path;
 			if (send_genindex() < 0)
 				return -1;
 		}
 	} else {
-		send_error(HTTP_ERROR_404);
-		return -1;
+		return send_error(HTTP_ERROR_404);
 	}
 
 	return 0;
@@ -775,8 +783,12 @@ int lonely_http::send_error(http_error_code_t e)
 		http_header += "\r\nAllow: OPTIONS, GET, HEAD, POST";
 
 	http_header += "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-	writen(cur_peer, http_header.c_str(), http_header.size());
 	fd2state[cur_peer]->keep_alive = 0;
+
+	if (writen(cur_peer, http_header.c_str(), http_header.size()) <= 0)
+		return -1;
+
+	shutdown(cur_peer);
 	return 0;
 }
 
@@ -803,8 +815,7 @@ int lonely_http::handle_request()
 	// incomplete header?
 	if ((ptr = strstr(req_buf, "\r\n\r\n")) == NULL) {
 		if (cur_time - fd2state[cur_peer]->header_time > timeout_header) {
-			send_error(HTTP_ERROR_400);
-			return -1;
+			return send_error(HTTP_ERROR_400);
 		}
 		fd2state[cur_peer]->keep_alive = 1;
 		return 0;
@@ -841,24 +852,17 @@ int lonely_http::handle_request()
 				if (*ptr != ' ')
 					break;
 			}
-			if (ptr >= end_ptr) {
-				send_error(HTTP_ERROR_400);
-				return -1;
-			}
+			if (ptr >= end_ptr)
+				return send_error(HTTP_ERROR_400);
 			size_t cl = strtoul(ptr, NULL, 10);
-			if (cl >= sizeof(body)) {
-				send_error(HTTP_ERROR_414);
-				return -1;
-			}
+			if (cl >= sizeof(body))
+				return send_error(HTTP_ERROR_414);
 			// The body should be right here, we dont mind if stupid senders
 			// send them separately
-			if ((size_t)recv(cur_peer, body, sizeof(body), MSG_DONTWAIT) != cl) {
-				send_error(HTTP_ERROR_400);
-				return -1;
-			}
+			if ((size_t)recv(cur_peer, body, sizeof(body), MSG_DONTWAIT) != cl)
+				return send_error(HTTP_ERROR_400);
 		} else {
-			send_error(HTTP_ERROR_411);
-			return -1;
+			return send_error(HTTP_ERROR_411);
 		}
 		action = &lonely_http::POST;
 		cur_request = HTTP_REQUEST_POST;
@@ -881,31 +885,24 @@ int lonely_http::handle_request()
 		action = &lonely_http::CONNECT;
 		cur_request = HTTP_REQUEST_CONNECT;
 	} else {
-		send_error(HTTP_ERROR_400);
-		return -1;
+		return send_error(HTTP_ERROR_400);
 	}
 
 	ptr = strchr(req_buf, '/');
-	if (!ptr) {
-		send_error(HTTP_ERROR_400);
-		return -1;
-	}
+	if (!ptr)
+		return send_error(HTTP_ERROR_400);
 
 	end_ptr = ptr + strcspn(ptr + 1, "? \t\r");
 
-	if (end_ptr >= last_byte) {
-		send_error(HTTP_ERROR_400);
-		return -1;
-	}
+	if (end_ptr >= last_byte)
+		return send_error(HTTP_ERROR_400);
 	end_ptr[1] = 0;
 
 	fd2state[cur_peer]->path = ptr;
 
 	ptr = end_ptr + 2; // rest of header
-	if (ptr > last_byte) {
-		send_error(HTTP_ERROR_400);
-		return -1;
-	}
+	if (ptr > last_byte)
+		return send_error(HTTP_ERROR_400);
 
 	if ((ptr2 = strcasestr(ptr, "Connection:")) && cur_peer < 30000) {
 		ptr2 += 11;
@@ -913,10 +910,9 @@ int lonely_http::handle_request()
 			if (*ptr2 != ' ')
 				break;
 		}
-		if (ptr2 >= last_byte) {
-			send_error(HTTP_ERROR_400);
-			return -1;
-		}
+		if (ptr2 >= last_byte)
+			return send_error(HTTP_ERROR_400);
+
 		if (strncasecmp(ptr2, "keep-alive", 10) == 0) {
 			fd2state[cur_peer]->keep_alive = 1;
 		}
@@ -928,19 +924,17 @@ int lonely_http::handle_request()
 				break;
 		}
 
-		if (ptr2 >= last_byte) {
-			send_error(HTTP_ERROR_400);
-			return -1;
-		}
+		if (ptr2 >= last_byte)
+			return send_error(HTTP_ERROR_400);
+
 		if ((end_ptr = strcasestr(ptr2, "\r\n"))) {
 
 			*end_ptr = 0;
 
 			// Not a security issue, but makes no sense
-			if (string(ptr2) == "icons") {
-				send_error(HTTP_ERROR_404);
-				return -1;
-			}
+			if (string(ptr2) == "icons")
+				return send_error(HTTP_ERROR_404);
+
 			// If already requesting vhost files (genindex), then, do not prepend
 			// vhost path again
 			if (!strstr(fd2state[cur_peer]->path.c_str(), "vhost")) {
@@ -951,54 +945,39 @@ int lonely_http::handle_request()
 					fd2state[cur_peer]->path += tmps;
 			}
 		} else {
-			send_error(HTTP_ERROR_400);
-			return -1;
+			return send_error(HTTP_ERROR_400);
 		}
 
 	}
 
 	// Range: bytes 0-7350
 	if ((ptr2 = strcasestr(ptr, "Range:")) != NULL) {
-		if (cur_request != HTTP_REQUEST_GET) {
-			send_error(HTTP_ERROR_416);
-			return -1;
-		}
+		if (cur_request != HTTP_REQUEST_GET) 
+			return send_error(HTTP_ERROR_416);
 
 		ptr2 += 6;
 		for (; ptr2 < last_byte; ++ptr2) {
 			if (*ptr2 != ' ')
 				break;
 		}
-		if (ptr2 >= last_byte) {
-			send_error(HTTP_ERROR_400);
-			return -1;
-		}
-		if (strncmp(ptr2, "bytes=", 6) != 0) {
-			send_error(HTTP_ERROR_416);
-			return -1;
-		}
+		if (ptr2 >= last_byte)
+			return send_error(HTTP_ERROR_400);
+		if (strncmp(ptr2, "bytes=", 6) != 0)
+			return send_error(HTTP_ERROR_416);
 		ptr2 += 6;
-		if (ptr2 >= last_byte) {
-			send_error(HTTP_ERROR_400);
-			return -1;
-		}
+		if (ptr2 >= last_byte)
+			return send_error(HTTP_ERROR_400);
 		end_ptr = NULL;
 		cur_start_range = strtoul(ptr2, &end_ptr, 10);
-		if (!end_ptr || end_ptr == ptr2 || end_ptr + 1 >= last_byte) {
-			send_error(HTTP_ERROR_400);
-			return -1;
-		}
+		if (!end_ptr || end_ptr == ptr2 || end_ptr + 1 >= last_byte)
+			return send_error(HTTP_ERROR_400);
 		char *end_ptr2 = NULL;
 		cur_end_range = strtoul(end_ptr + 1, &end_ptr2, 10);
-		if (!end_ptr2 || end_ptr2 >= last_byte) {
-			send_error(HTTP_ERROR_400);
-			return -1;
-		}
+		if (!end_ptr2 || end_ptr2 >= last_byte)
+			return send_error(HTTP_ERROR_400);
 		// dont accept further ranges, one is enough
-		if (*end_ptr2 != '\r') {
-			send_error(HTTP_ERROR_416);
-			return -1;
-		}
+		if (*end_ptr2 != '\r')
+			return send_error(HTTP_ERROR_416);
 		cur_range_requested = 1;
 	}
 
