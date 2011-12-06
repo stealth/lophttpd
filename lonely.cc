@@ -291,11 +291,7 @@ int lonely::loop()
 			if (pfds[i].revents == 0)
 				continue;
 
-#ifdef linux
-			if ((pfds[i].revents & (POLLERR|POLLHUP|POLLNVAL|POLLRDHUP)) != 0) {
-#else
 			if ((pfds[i].revents & (POLLERR|POLLHUP|POLLNVAL)) != 0) {
-#endif
 				cleanup(i);
 				continue;
 			}
