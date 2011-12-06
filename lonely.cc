@@ -842,6 +842,7 @@ int lonely_http::handle_request()
 	if (strncasecmp(req_buf, "GET", 3) == 0) {
 		action = &lonely_http::GET;
 		cur_request = HTTP_REQUEST_GET;
+		ptr = req_buf + 3;
 
 	// For POST requests, we also require a Content-Length that matches.
 	// The above if() already ensured we have header until "\r\n\r\n"
@@ -866,30 +867,41 @@ int lonely_http::handle_request()
 		}
 		action = &lonely_http::POST;
 		cur_request = HTTP_REQUEST_POST;
+		ptr = req_buf + 4;
 	} else if (strncasecmp(req_buf, "OPTIONS", 7) == 0) {
 		action = &lonely_http::OPTIONS;
 		cur_request = HTTP_REQUEST_OPTIONS;
+		ptr = req_buf + 7;
 	} else if (strncasecmp(req_buf, "HEAD", 4) == 0) {
 		action = &lonely_http::HEAD;
 		cur_request = HTTP_REQUEST_HEAD;
+		ptr = req_buf + 4;
 	} else if (strncasecmp(req_buf, "PUT", 3) == 0) {
 		action = &lonely_http::PUT;
 		cur_request = HTTP_REQUEST_PUT;
+		ptr = req_buf + 3;
 	} else if (strncasecmp(req_buf, "DELETE", 6) == 0) {
 		action = &lonely_http::DELETE;
 		cur_request = HTTP_REQUEST_DELETE;
+		ptr = req_buf + 6;
 	} else if (strncasecmp(req_buf, "TRACE", 5) == 0) {
 		action = &lonely_http::TRACE;
 		cur_request = HTTP_REQUEST_TRACE;
+		ptr = req_buf + 5;
 	} else if (strncasecmp(req_buf, "CONNECT", 7) == 0) {
 		action = &lonely_http::CONNECT;
 		cur_request = HTTP_REQUEST_CONNECT;
+		ptr = req_buf + 7;
 	} else {
 		return send_error(HTTP_ERROR_400);
 	}
 
-	ptr = strchr(req_buf, '/');
-	if (!ptr)
+	for (; ptr < end_ptr; ++ptr) {
+		if (*ptr != ' ')
+			break;
+	}
+
+	if (ptr >= end_ptr)
 		return send_error(HTTP_ERROR_400);
 
 	end_ptr = ptr + strcspn(ptr + 1, "? \t\r");
