@@ -33,7 +33,7 @@ class webstress {
 
 	string host, port, path, err;
 	bool sequential;
-	int max_cl, peers, ests, hdr_fail, write_fail, read_fail;
+	int max_cl, peers, ests, hdr_fail, write_fail, read_fail, to_fail, hup_fail, max_fd;
 	time_t now;
 
 	pollfd *pfds;
@@ -51,13 +51,16 @@ class webstress {
 public:
 	webstress(const string &h, const string &p, const string &f, bool seq = 0)
 		: host(h), port(p), path(f), err(""), sequential(seq), max_cl(1024),
-		  peers(0), ests(0), hdr_fail(0), write_fail(0), read_fail(0), pfds(NULL)
+		  peers(0), ests(0), hdr_fail(0), write_fail(0), read_fail(0), 
+	          to_fail(0), hup_fail(0), max_fd(0), pfds(NULL)
 	{
 	}
 
 	~webstress()
 	{
 	}
+
+	void calc_max_fd();
 
 	void max_clients(int n)
 	{
@@ -112,6 +115,9 @@ int webstress::cleanup(int fd)
 	delete clients[fd];
 	clients[fd] = NULL;
 	--peers;
+
+	if (fd == max_fd)
+		--max_fd;
 	return 0;
 }
 
@@ -121,13 +127,35 @@ void webstress::print_stat(int fd)
 	if (now - clients[fd]->start_time == 0)
 		--clients[fd]->start_time;
 
-	printf("[#P=%05u][#EST=%05u][rf=%05u][hdrf=%05u][wf=%05u][cnt=%08u][%s][%f MB/s]\n",
-	       peers, ests,
-	       read_fail, hdr_fail, write_fail, clients[fd]->obtained,
+	char s = 'X';
+	switch (clients[fd]->state) {
+	case HTTP_STATE_CONNECTING:
+		s = 'c';
+		break;
+	case HTTP_STATE_CONNECTED:
+		s = 'C';
+		break;
+	case HTTP_STATE_TRANSFERING:
+		s = 'T';
+		break;
+	}
+
+	printf("(%c)[#P=%05u][#EST=%05u][rf=%05u][hdrf=%05u][wf=%05u][tf=%05u][hf=%05u][cnt=%08u][%s][%f MB/s]\n",
+	       s, peers, ests,
+	       read_fail, hdr_fail, write_fail, to_fail, hup_fail, clients[fd]->obtained,
 	       path.c_str(),
 	       (double)clients[fd]->content_length/(now - clients[fd]->start_time)/(1024*1024));
 }
 
+void webstress::calc_max_fd()
+{
+	for (int i = max_fd; i >= 0; --i) {
+		if (pfds[i].fd != -1) {
+			max_fd = i;
+			return;
+		}
+	}
+}
 
 int webstress::loop()
 {
@@ -200,16 +228,20 @@ int webstress::loop()
 			pfds[sock].events = POLLIN|POLLOUT;
 			pfds[sock].revents = 0;
 			++peers;
+			if (sock > max_fd)
+				max_fd = sock;
 		}
 
-		if (poll(pfds, rl.rlim_cur, 100) < 0)
+		if (poll(pfds, max_fd + 1, 100) < 0)
 			continue;
 
 		// starts at most at FD 3
-		for (unsigned int i = 3; i < rl.rlim_cur; ++i) {
+		for (int i = 3; i <= max_fd ; ++i) {
 			if (!clients[i])
 				continue;
 			if (pfds[i].revents == 0 && now - clients[i]->time > TIMEOUT) {
+				++to_fail;
+				print_stat(i);
 				cleanup(i);
 				continue;
 			}
@@ -217,7 +249,7 @@ int webstress::loop()
 				continue;
 
 			if ((pfds[i].revents & (POLLERR|POLLHUP|POLLNVAL)) != 0) {
-				++read_fail;
+				++hup_fail;
 				print_stat(i);
 				cleanup(i);
 				continue;
@@ -231,17 +263,21 @@ int webstress::loop()
 					continue;
 				}
 				if (e != 0) {
+					++hup_fail;
+					print_stat(i);
 					cleanup(i);
 					continue;
 				}
 				++ests;
+				clients[i]->state = HTTP_STATE_CONNECTED;
+
 				if (writen(i, GET, GET_len) <= 0) {
 					++write_fail;
+					print_stat(i);
 					cleanup(i);
 					continue;
 				}
 
-				clients[i]->state = HTTP_STATE_CONNECTED;
 				pfds[i].revents = 0;
 				pfds[i].events = POLLIN;
 				clients[i]->start_time = clients[i]->time = now;
@@ -249,13 +285,16 @@ int webstress::loop()
 			} else if (clients[i]->state == HTTP_STATE_CONNECTED) {
 				memset(buf, 0, sizeof(buf));
 				if ((r = recv(i, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
+					++read_fail;
+					print_stat(i);
 					cleanup(i);
 					continue;
 				}
 				char *ptr = NULL;
 				if ((ptr = strstr(buf, "\r\n\r\n")) == NULL) {
 					if (now - clients[i]->time > TIMEOUT) {
-						++hdr_fail;
+						++to_fail;
+						print_stat(i);
 						cleanup(i);
 					}
 					continue;
@@ -308,6 +347,7 @@ int webstress::loop()
 				cleanup(i);
 			}
 		}
+		calc_max_fd();
 
 	}
 	return 0;

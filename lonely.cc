@@ -225,8 +225,9 @@ void lonely::cleanup(int fd)
 	close(fd);
 
 	if (fd2state.find(fd) != fd2state.end() && fd2state[fd]) {
-		delete fd2state[fd];
-		fd2state[fd] = NULL;
+		fd2state[fd]->peer_fd = -1;
+		fd2state[fd]->path.clear();
+		fd2state[fd]->state = STATE_NONE;
 	}
 	if (max_fd == fd)
 		--max_fd;
@@ -269,7 +270,8 @@ int lonely::loop()
 		for (i = first_fd; i <= max_fd; ++i) {
 			if (pfds[i].fd == -1)
 				continue;
-			if (fd2state.find(i) == fd2state.end() || !fd2state[i]) {
+			if (fd2state.find(i) == fd2state.end() || !fd2state[i] ||
+			    fd2state[i]->state = STATE_NONE) {
 				cleanup(i);
 				continue;
 			}
@@ -315,11 +317,18 @@ int lonely::loop()
 				pfds[afd].fd = afd;
 				pfds[afd].events = POLLIN;
 				pfds[afd].revents = 0;
-
+#ifdef GETFL_OPTIMIZATION
+				int flags = O_RDWR;
+#else
 				int flags = fcntl(afd, F_GETFL);
+#endif
 				fcntl(afd, F_SETFL, flags|O_NONBLOCK);
 
-				fd2state[afd] = new (nothrow) struct status;
+				// We reuse preveiously allocated but 'cleanup'ed memory to save
+				// speed for lotsa new/delete calls on heavy traffic
+				if (!fd2state[afd])
+					fd2state[afd] = new (nothrow) struct status;
+
 				if (!fd2state[afd]) {
 					cleanup(afd);
 					continue;
