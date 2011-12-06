@@ -664,11 +664,14 @@ void lonely_http::clear_cache()
 		}
 	}
 
-	for (map<inode, int>::iterator it = file_cache.begin(); it != file_cache.end(); ++it) {
+	for (map<inode, int>::iterator it = file_cache.begin(); it != file_cache.end();) {
 		if (dont_close.find(it->first) == dont_close.end()) {
 			close(it->second);
 			file_cache.erase(it);
+			it = file_cache.begin();
+			continue;
 		}
+		++it;
 	}
 }
 
