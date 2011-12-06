@@ -407,7 +407,7 @@ int lonely_http::send_http_header()
 	string c_type = "application/data";
 	int i = 0;
 
-	string &p = fd2state[cur_peer]->path;
+	const string &p = fd2state[cur_peer]->path;
 	for (i = 0; !content_types[i].extension.empty(); ++i) {
 		if (p.size() <= content_types[i].extension.size())
 			continue;
