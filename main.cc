@@ -163,6 +163,7 @@ int main(int argc, char **argv)
 	uid_t euid = geteuid();
 
 	tzset();
+	nice(-20);
 	close_fds();
 
 	if (httpd.init(Config::port) < 0) {
