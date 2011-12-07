@@ -346,13 +346,15 @@ int lonely::loop()
 
 					// We reuse preveiously allocated but 'cleanup'ed memory to save
 					// speed for lotsa new/delete calls on heavy traffic
-					if (!fd2state[afd])
+					if (!fd2state[afd]) {
 						fd2state[afd] = new (nothrow) struct status;
 
-					if (!fd2state[afd]) {
-						cleanup(afd);
-						continue;
+						if (!fd2state[afd]) {
+							cleanup(afd);
+							continue;
+						}
 					}
+
 					fd2state[afd]->state = STATE_CONNECTED;
 					fd2state[afd]->alive_time = cur_time;
 					fd2state[afd]->sin = sin;
@@ -538,6 +540,7 @@ int lonely_http::transfer()
 #endif
 		fd2state[cur_peer]->state = STATE_CONNECTED;
 		fd2state[cur_peer]->keep_alive = 0;
+		return -1;
 	} else if (fd2state[cur_peer]->left == 0) {
 		//close(pf.fd); Do not close, due to caching
 		fd2state[cur_peer]->state = STATE_CONNECTED;
