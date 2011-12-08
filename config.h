@@ -12,8 +12,8 @@ namespace Config
 	extern std::string user, logfile;
 	extern uid_t user_uid, user_gid;
 	extern uint16_t port;
-	extern uint16_t log_granularity;
 	extern int cores, master;
+	extern size_t mss;
 }
 
 #endif

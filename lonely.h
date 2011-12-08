@@ -137,6 +137,7 @@ private:
 	bool cur_range_requested;
 	http_request_t cur_request;
 	log_provider *logger;
+	size_t mss;
 
 	std::map<inode, int> file_cache;
 	std::map<std::string, struct stat> stat_cache;
@@ -176,10 +177,10 @@ private:
 public:
 	bool vhosts;
 
-	lonely_http()
+	lonely_http(size_t s = 1024)
 	        : cur_start_range(0), cur_end_range(0),
 		  cur_range_requested(0), cur_request(HTTP_REQUEST_NONE),
-	          logger(NULL), vhosts(0) {};
+	          logger(NULL), mss(s), vhosts(0) {};
 
 	virtual ~lonely_http() { delete logger;};
 

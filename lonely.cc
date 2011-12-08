@@ -49,6 +49,7 @@
 #include <sys/stat.h>
 #include <sys/resource.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include "log.h"
 #include "lonely.h"
@@ -507,8 +508,8 @@ int lonely_http::transfer()
 	}
 
 	size_t n = fd2state[cur_peer]->left;
-	if (n > 0x1000)
-		n = 0x1000;
+	if (n > mss)
+		n = mss;
 
 #ifdef linux
 	ssize_t r = sendfile(cur_peer, fd, &fd2state[cur_peer]->offset, n);

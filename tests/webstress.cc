@@ -46,7 +46,7 @@ class webstress {
 
 	map<int, client *> clients;
 
-	static const int TIMEOUT = 30;
+	static const int TIMEOUT = 60;
 
 public:
 	webstress(const string &h, const string &p, const string &f, bool seq = 0)

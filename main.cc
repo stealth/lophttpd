@@ -58,11 +58,12 @@ namespace Config
 	string user = "wwwrun", logfile = "/var/log/lophttpd", log_provider = "file";
 	uid_t user_uid = 99, user_gid = 99;
 	uint16_t port = 80;
-	uint16_t log_granularity = 3;
 	int cores = -1;
 
 	// on multicore there is only one master
 	int master = 1;
+
+	size_t mss = 1024;
 }
 
 
@@ -76,7 +77,7 @@ void die(const char *s, bool please_die = 1)
 
 void help(const char *p)
 {
-	cerr<<"Usage: "<<p<<" [-R web-root] [-i] [-H] [-h] [-u user] [-l logfile] [-p port] [-L provider] [-n nCores]\n\n"
+	cerr<<"Usage: "<<p<<" [-R web-root] [-iHh] [-u user] [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n\n"
 	    <<"\t\t -R : web-root, default "<<Config::root<<endl
 	    <<"\t\t -i : use autoindexing\n"
 	    <<"\t\t -H : use vhosts (requires vhost setup in web-root)\n"
@@ -85,7 +86,8 @@ void help(const char *p)
 	    <<"\t\t -l : logfile, default "<<Config::logfile<<endl
 	    <<"\t\t -L : logprovider, default "<<Config::log_provider<<endl
 	    <<"\t\t -n : number of CPU cores to use, default all"<<endl
-	    <<"\t\t -p : port, default "<<Config::port<<endl;
+	    <<"\t\t -p : port, default "<<Config::port<<endl
+	    <<"\t\t -S : sendfile() chunksize (no need to change), default: "<<Config::mss<<endl<<endl;
 	exit(errno);
 }
 
@@ -103,10 +105,13 @@ void close_fds()
 	dup2(0, 1);
 }
 
-static lonely_http httpd;
+static lonely_http *httpd = NULL;
 
 void sigusr1(int x)
 {
+	if (!httpd)
+		return;
+
 	if (Config::gen_index) {
 		NS_Misc::dir2index.clear();
 		if (Config::is_chrooted)
@@ -114,7 +119,7 @@ void sigusr1(int x)
 		else
 			NS_Misc::generate_index(Config::root);
 	}
-	httpd.clear_cache();
+	httpd->clear_cache();
 }
 
 
@@ -128,7 +133,7 @@ int main(int argc, char **argv)
 		cerr<<"Continuing in UNSAFE mode!\n\n";
 	}
 
-	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:")) != -1) {
+	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:")) != -1) {
 		switch (c) {
 		case 'i':
 			Config::gen_index = 1;
@@ -154,6 +159,9 @@ int main(int argc, char **argv)
 		case 'n':
 			Config::cores = strtoul(optarg, NULL, 10);
 			break;
+		case 'S':
+			Config::mss = strtoul(optarg, NULL, 10);
+			break;
 		case 'h':
 		default:
 			help(*argv);
@@ -166,8 +174,14 @@ int main(int argc, char **argv)
 	nice(-20);
 	close_fds();
 
-	if (httpd.init(Config::port) < 0) {
-		cerr<<httpd.why()<<endl;
+	httpd = new (nothrow) lonely_http(Config::mss);
+	if (!httpd) {
+		cerr<<"OOM: Cannot create webserver object!\n";
+		return -1;
+	}
+
+	if (httpd->init(Config::port) < 0) {
+		cerr<<httpd->why()<<endl;
 		return -1;
 	}
 
@@ -176,8 +190,8 @@ int main(int argc, char **argv)
 	NS_Misc::setup_multicore(Config::cores);
 
 	// Every core has its own logfile to avoid locking
-	if (httpd.open_log(Config::logfile, Config::log_provider, NS_Misc::my_core) < 0) {
-		cerr<<"Opening logfile: "<<httpd.why()<<endl;
+	if (httpd->open_log(Config::logfile, Config::log_provider, NS_Misc::my_core) < 0) {
+		cerr<<"Opening logfile: "<<httpd->why()<<endl;
 		return -1;
 	}
 
@@ -213,7 +227,7 @@ int main(int argc, char **argv)
 		die("setuid", euid == 0);
 
 	if (Config::virtual_hosts)
-		httpd.vhosts = 1;
+		httpd->vhosts = 1;
 
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(sa));
@@ -234,8 +248,9 @@ int main(int argc, char **argv)
 		setsid();
 	}
 
-	httpd.loop();
+	httpd->loop();
 
+	delete httpd;
 	return 0;
 }
 
