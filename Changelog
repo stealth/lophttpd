@@ -1,3 +1,14 @@
+0.91
+----
++ Thu Dec 15
++ Fixed clear_cache()
++ enhanced webstressing tool
++ made sendfile() chunksize configurable
++ Using accept4() on Linux
++ Changed caching of open/stat to give less surface for memory
+  exhaustion attacks
+
+
 0.90
 ----
 
