@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2010 Sebastian Krahmer.
+ * Copyright (C) 2004-2011 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <cstring>
@@ -39,6 +40,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <limits.h>
 #include <cstdlib>
 #include "socket.h"
@@ -85,6 +87,47 @@ int reuse(int sock)
 }
 
 
+int bind_local(int sock, const string &host, const string &port, bool do_listen, int af)
+{
+	struct addrinfo *ai = NULL, hints;
+	int r;
+
+	memset(&hints, 0, sizeof(hints));
+
+	hints.ai_family = af;
+	hints.ai_socktype = SOCK_STREAM;
+
+	if ((r = getaddrinfo(host.c_str(), port.c_str(), &hints, &ai)) < 0) {
+		error = "NS_Socket::bind_local::getaddrinfo:";
+		error += gai_strerror(r);
+		return -1;
+	}
+
+	if (reuse(sock) < 0)
+		return -1;
+
+	if (bind(sock, ai->ai_addr, ai->ai_addrlen) < 0) {
+		error = "NS_Socket::bind_local::bind: ";
+		error += strerror(errno);
+		return -1;
+	}
+
+	freeaddrinfo(ai);
+
+	if (do_listen) {
+		if (listen(sock, 10000) < 0) {
+			if (listen(sock, SOMAXCONN) < 0) {
+				error = "NS_Socket::bind_local::listen: ";
+				error += strerror(errno);
+				return -1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+
 int bind_local(int sock, u_int16_t port, bool do_listen, int tries)
 {
 	struct sockaddr_in saddr;
@@ -112,19 +155,17 @@ int bind_local(int sock, u_int16_t port, bool do_listen, int tries)
 	}
 
 	if (do_listen) {
-		if (listen(sock, 10000) < 0) {
-			if (listen(sock, SOMAXCONN) < 0) {
-				error = "NS_Socket::bind_local::listen: ";
-				error += strerror(errno);
-				return -1;
-			}
+		if (listen(sock, SOMAXCONN) < 0) {
+			error = "NS_Socket::bind_local::listen: ";
+			error += strerror(errno);
+			return -1;
 		}
 	}
 	return 0;
 }
 
 
-int tcp_connect_nb(struct sockaddr_in sin, u_int16_t local_port)
+int tcp_connect_nb(struct sockaddr_in sin, uint16_t local_port)
 {
 	int sock = socket(PF_INET, SOCK_STREAM, 0);
 	if (sock < 0) {

@@ -39,6 +39,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <signal.h>
@@ -57,8 +58,8 @@ namespace Config
 	bool gen_index = 0, virtual_hosts = 0, is_chrooted = 0;
 	string user = "wwwrun", logfile = "/var/log/lophttpd", log_provider = "file";
 	uid_t user_uid = 99, user_gid = 99;
-	uint16_t port = 80;
-	int cores = -1;
+	string host = "0.0.0.0", port = "80";
+	int cores = -1, af = AF_INET;
 
 	// on multicore there is only one master
 	int master = 1;
@@ -77,9 +78,11 @@ void die(const char *s, bool please_die = 1)
 
 void help(const char *p)
 {
-	cerr<<"Usage: "<<p<<" [-R web-root] [-iHh] [-u user] [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n\n"
+	cerr<<"Usage: "<<p<<" [-6] [-R web-root] [-iHh] [-I IP] [-u user] [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n\n"
+	    <<"\t\t -6 : use IPv6, default is IPv4\n"
 	    <<"\t\t -R : web-root, default "<<Config::root<<endl
 	    <<"\t\t -i : use autoindexing\n"
+	    <<"\t\t -I : IP(6) to bind to, default {INADDR_ANY}\n"
 	    <<"\t\t -H : use vhosts (requires vhost setup in web-root)\n"
 	    <<"\t\t -h : this help\n"
 	    <<"\t\t -u : run as this user, default "<<Config::user<<endl
@@ -133,8 +136,12 @@ int main(int argc, char **argv)
 		cerr<<"Continuing in UNSAFE mode!\n\n";
 	}
 
-	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:")) != -1) {
+	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6")) != -1) {
 		switch (c) {
+		case '6':
+			Config::host = "::0";
+			Config::af = AF_INET6;
+			break;
 		case 'i':
 			Config::gen_index = 1;
 			break;
@@ -147,8 +154,11 @@ int main(int argc, char **argv)
 		case 'u':
 			Config::user = optarg;
 			break;
+		case 'I':
+			Config::host = optarg;
+			break;
 		case 'p':
-			Config::port = strtoul(optarg, NULL, 10);
+			Config::port = optarg;
 			break;
 		case 'l':
 			Config::logfile = optarg;
@@ -180,7 +190,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	if (httpd->init(Config::port) < 0) {
+	if (httpd->init(Config::host, Config::port, Config::af) < 0) {
 		cerr<<httpd->why()<<endl;
 		return -1;
 	}

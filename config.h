@@ -11,8 +11,8 @@ namespace Config
 	extern bool gen_index, virtual_hosts, is_chrooted;
 	extern std::string user, logfile;
 	extern uid_t user_uid, user_gid;
-	extern uint16_t port;
-	extern int cores, master;
+	extern std::string host, port;
+	extern int cores, master, af;
 	extern size_t mss;
 }
 

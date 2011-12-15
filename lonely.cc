@@ -149,11 +149,14 @@ const char *lonely::why()
 	return err.c_str();
 }
 
-int lonely::init(u_int16_t local_port)
+
+int lonely::init(const string &host, const string &port, int a)
 {
 	cur_time = time(NULL);
 
-	int sock_fd = socket(PF_INET, SOCK_STREAM, 0);
+	af = a;
+
+	int sock_fd = socket(af, SOCK_STREAM, 0);
 	if (sock_fd < 0) {
 		err = "lonely::init::socket:";
 		err += strerror(errno);
@@ -161,7 +164,7 @@ int lonely::init(u_int16_t local_port)
 	}
 
 	// bind & listen
-	if (bind_local(sock_fd, local_port, 1, 1) < 0) {
+	if (bind_local(sock_fd, host, port, 1, af) < 0) {
 		err = NS_Socket::why();
 		return -1;
 	}
@@ -259,16 +262,23 @@ void lonely::calc_max_fd()
 }
 
 
-int lonely::loop()
+int lonely_http::loop()
 {
 	int i = 0;
 #ifndef linux
 	int flags = O_RDWR;
 #endif
 	struct sockaddr_in sin;
+	struct sockaddr_in6 sin6;
 	socklen_t slen = sizeof(sin);
+	struct sockaddr *saddr = (struct sockaddr *)&sin;
 	struct tm tm;
 	struct timeval tv;
+
+	if (af == AF_INET6) {
+		slen = sizeof(sin6);
+		saddr = (struct sockaddr *)&sin6;
+	}
 
 	for (;;) {
 		// 0 means timeout which we also need to handle
@@ -326,9 +336,9 @@ int lonely::loop()
 				int afd = 0;
 				for (;;) {
 #ifdef linux
-					afd = accept4(i, (struct sockaddr *)&sin, &slen, SOCK_NONBLOCK);
+					afd = accept4(i, saddr, &slen, SOCK_NONBLOCK);
 #else
-					afd = accept(i, (struct sockaddr *)&sin, &slen);
+					afd = accept(i, saddr, &slen);
 #endif
 					if (afd < 0) {
 						if (errno == EMFILE || errno == ENFILE)
@@ -359,6 +369,7 @@ int lonely::loop()
 					fd2state[afd]->state = STATE_CONNECTED;
 					fd2state[afd]->alive_time = cur_time;
 					fd2state[afd]->sin = sin;
+					fd2state[afd]->sin6 = sin6;
 
 					if (afd > max_fd)
 						max_fd = afd;
@@ -562,7 +573,11 @@ void lonely_http::log(const string &msg)
 	string prefix = local_date;
 
 	char dst[128];
-	inet_ntop(AF_INET, &fd2state[cur_peer]->sin.sin_addr, dst, sizeof(dst));
+	if (af == AF_INET)
+		inet_ntop(AF_INET, &fd2state[cur_peer]->sin.sin_addr, dst, sizeof(dst));
+	else
+		inet_ntop(AF_INET6, &fd2state[cur_peer]->sin6.sin6_addr, dst, sizeof(dst));
+
 	prefix += ": ";
 	prefix += dst;
 	prefix += ": ";

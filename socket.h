@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001-2008 Sebastian Krahmer.
+ * Copyright (C) 2001-2011 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,6 +33,8 @@
 #define _MY_SOCKET_H_
 
 #include <sys/types.h>
+#include <stdint.h>
+#include <string>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
@@ -46,9 +48,11 @@ int reuse(int sock);
 
 int dstaddr(int sock, sockaddr_in *dst);
 
+int bind_local(int sock, const std::string &h, const std::string &p, bool do_listen, int af = AF_INET);
+
 int bind_local(int sock, u_int16_t port, bool do_listen, int tries);
 
-int tcp_connect_nb(struct sockaddr_in sin, u_int16_t local_port);
+int tcp_connect_nb(struct sockaddr_in sin, uint16_t local_port);
 
 int finish_connecting(int);
 

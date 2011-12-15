@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Sebastian Krahmer.
+ * Copyright (C) 2008-2011 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,18 +46,15 @@
 
 
 class lonely {
-private:
-	struct pollfd *pfds;
-
 protected:
+	struct pollfd *pfds;
 	int first_fd, max_fd;
 	int cur_peer;
+	int af;
+
 	time_t cur_time;
 
-	char gmt_date[64], local_date[64];
-
 	std::string err;
-
 	struct status **fd2state;
 
 	static const uint8_t timeout_alive, timeout_closing;
@@ -68,20 +65,15 @@ protected:
 
 	void calc_max_fd();
 
-	virtual int handle_request() = 0;
-
-	virtual void clear_cache() = 0;
-
 public:
-	lonely() : first_fd(0), max_fd(0), cur_peer(-1), cur_time(0), err(""), fd2state(NULL) {};
+	lonely()
+	 : first_fd(0), max_fd(0), cur_peer(-1), cur_time(0), err(""), fd2state(NULL) {};
 
 	virtual ~lonely() { delete [] pfds; };
 
-	int init(u_int16_t);
+	int init(const std::string &, const std::string &, int a = AF_INET);
 
-	int loop();
-
-	virtual int transfer() = 0;
+	virtual int loop() = 0;
 
 	const char *why();
 };
@@ -139,6 +131,8 @@ private:
 	log_provider *logger;
 	size_t mss;
 
+	char gmt_date[64], local_date[64];
+
 	std::map<inode, int> file_cache;
 	std::map<std::string, struct stat> stat_cache;
 
@@ -174,6 +168,10 @@ private:
 
 	int open();
 
+	int handle_request();
+
+	int transfer();
+
 public:
 	bool vhosts;
 
@@ -184,15 +182,13 @@ public:
 
 	virtual ~lonely_http() { delete logger;};
 
-	int handle_request();
-
-	virtual int transfer();
-
 	int send_genindex();
 
 	int open_log(const std::string &, const std::string &, int core);
 
 	void clear_cache();
+
+	int loop();
 };
 
 
@@ -216,6 +212,7 @@ struct status {
 	dev_t dev;
 	ino_t ino;
 	struct sockaddr_in sin;
+	struct sockaddr_in6 sin6;
 	std::string path;
 
 	status()

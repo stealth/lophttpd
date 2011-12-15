@@ -106,6 +106,13 @@ indexing information in memory then (per core!). This does not happen
 if the directory is writable since lophttpd will dump content into a
 index.html file if above a certain threshold.
 
+Since version > 0.91 lophttpd also supports IPv6, by simply using "-6"
+commandline switch. The default bind goes to "::0" then, so
+if you want to bind to a specific IPv6 address, you have to
+add -I switch *after* -6. You can either run IPv4 or IPv6 in once
+instance, not both. But you can run two lophttpd's: one with IPv4
+and one with IPv6 if needed.
+
 If you have ideas and or offer performance/testing environment please
 drop me an email: sebastian.krahmer [at] gmail [dot] com :-)
 
