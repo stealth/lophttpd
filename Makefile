@@ -1,4 +1,4 @@
-CXX=c++ -Wall -O2 -DGETFL_OPTIMIZATION -DSTAT_CACHE
+CXX=c++ -Wall -O2 -DGETFL_OPTIMIZATION
 LD=c++
 
 all: lhttpd

@@ -42,6 +42,7 @@
 #include <string>
 #include <stdint.h>
 #include <map>
+#include <utility>
 #include "log.h"
 
 
@@ -134,7 +135,9 @@ private:
 	char gmt_date[64], local_date[64];
 
 	std::map<inode, int> file_cache;
-	std::map<std::string, struct stat> stat_cache;
+
+	// pathname to (stat, content-type)
+	std::map<std::string, std::pair<struct stat, int> > stat_cache;
 
 	static const uint8_t timeout_header;
 
@@ -214,10 +217,11 @@ struct status {
 	struct sockaddr_in sin;
 	struct sockaddr_in6 sin6;
 	std::string path;
+	int ct;
 
 	status()
 	 : peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
-	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path("") {};
+	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), ct(0) {};
 };
 
 

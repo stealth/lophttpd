@@ -68,6 +68,11 @@ using namespace NS_Socket;
 struct ext2CT {
 	const std::string extension, c_type;
 } content_types[] = {
+	// This one must be at index 0 and 1, as we keep a cache of
+	// file <-> content-type with and index to this table
+	{".data", "application/data"},
+	{".html", "text/html"},
+
 	{".apk", "application/octet-stream"},
 	{".avi", "video/x-msvideo"},
 	{".bmp", "image/bmp"},
@@ -86,7 +91,6 @@ struct ext2CT {
 	{".h", "text/x-chdr"},
 	{".hh", "text/x-chdr"},
 	{".htm", "text/html"},
-	{".html", "text/html"},
 	{".ico", "image/x-ico"},
 	{".iso", "application/x-cd-image"},
 	{".java", "text/x-java"},
@@ -454,20 +458,8 @@ int lonely_http::send_http_header()
 	               "Content-Length: %zu\r\n\r\n";
 
 	char h_buf[http_header.size() + 128];
-	string c_type = "application/data";
-	int i = 0;
-
-	const string &p = fd2state[cur_peer]->path;
-	for (i = 0; !content_types[i].extension.empty(); ++i) {
-		if (p.size() <= content_types[i].extension.size())
-			continue;
-		if (strcasestr(p.c_str() + p.size() - content_types[i].extension.size(),
-		               content_types[i].extension.c_str()))
-			break;
-	}
-	if (!content_types[i].c_type.empty())
-		c_type = content_types[i].c_type;
-	snprintf(h_buf, sizeof(h_buf), http_header.c_str(), c_type.c_str(), fd2state[cur_peer]->left);
+	snprintf(h_buf, sizeof(h_buf), http_header.c_str(),
+	          content_types[fd2state[cur_peer]->ct].c_type.c_str(), fd2state[cur_peer]->left);
 
 	if (writen(cur_peer, h_buf, strlen(h_buf)) <= 0)
 		return -1;
@@ -588,7 +580,7 @@ void lonely_http::log(const string &msg)
 int lonely_http::HEAD()
 {
 	string head;
-	char content_len[128];
+	char content[128];
 	size_t cl = 0;
 
 	string logstr = "HEAD ";
@@ -613,8 +605,12 @@ int lonely_http::HEAD()
 				map<string, string>::iterator i = NS_Misc::dir2index.find(o_path);
 				if (i == NS_Misc::dir2index.end())
 					cl = 0;
-				else
+				else {
 					cl = i->second.size();
+					// override content-type to text/html as we know it know
+					fd2state[cur_peer]->ct = 1;
+				}
+
 				// Not needed, since request is finished here
 				//fd2state[cur_peer]->path = o_path;
 			}
@@ -630,9 +626,10 @@ int lonely_http::HEAD()
 	}
 
 	head += gmt_date;
-	snprintf(content_len, sizeof(content_len), "\r\nContent-Length: %zu\r\n", cl);
-	head += content_len;
-	head += "Server: lophttpd\r\nConnection: keep-alive\r\n\r\n";
+	snprintf(content, sizeof(content), "\r\nContent-Length: %zu\r\nContent-Type: ", cl);
+	head += content;
+	head += content_types[fd2state[cur_peer]->ct].c_type;
+	head += "\r\nServer: lophttpd\r\nConnection: keep-alive\r\n\r\n";
 
 	if (writen(cur_peer, head.c_str(), head.size()) <= 0)
 		return -1;
@@ -719,9 +716,7 @@ void lonely_http::clear_cache()
 int lonely_http::stat()
 {
 	const string &p = fd2state[cur_peer]->path;
-	int r = 0;
-
-#ifdef STAT_CACHE
+	int r = 0, ct = 0, i = 0;
 	bool cacheit = 0;
 
 	// do not cache stupid filenames which most likely is an attack
@@ -730,36 +725,58 @@ int lonely_http::stat()
 		if (p.find("//") == string::npos)
 			cacheit = 1;
 
-	map<string, struct stat>::iterator it;
+	map<string, pair<struct stat, int> >::iterator it;
 
-	if (!cacheit)
+	fd2state[cur_peer]->ct = 0;
+
+	if (!cacheit) {
 		r = ::stat(p.c_str(), &cur_stat);
-	else {
+	} else {
 		it = stat_cache.find(p);
 		if (it != stat_cache.end()) {
-			cur_stat = it->second;
+			cur_stat = it->second.first;
+			ct = it->second.second;
 			cacheit = 0;
-		} else
+		} else {
 			r = ::stat(p.c_str(), &cur_stat);
+			if (r < 0)
+				return r;
+
+			// text/html if in generated index
+			if (S_ISDIR(cur_stat.st_mode) &&
+			    NS_Misc::dir2index.find(p) != NS_Misc::dir2index.end())
+				ct = 1;
+			else {
+				// Not cached, so lets also find out about the content-type
+				for (i = 0; !content_types[i].extension.empty(); ++i) {
+					if (p.size() <= content_types[i].extension.size())
+						continue;
+					if (strcasestr(p.c_str()+p.size() - content_types[i].extension.size(),
+				        	       content_types[i].extension.c_str()))
+						break;
+				}
+				if (!content_types[i].c_type.empty())
+					ct = i;
+			}
+		}
 	}
 
 	if (r == 0) {
 		fd2state[cur_peer]->dev = cur_stat.st_dev;
 		fd2state[cur_peer]->ino = cur_stat.st_ino;
+		fd2state[cur_peer]->ct = ct;
 		if (cacheit)
-			stat_cache[p] = cur_stat;
+			stat_cache[p] = make_pair<struct stat, int>(cur_stat, ct);
 	}
-#else
-	r = ::stat(p.c_str(), &cur_stat);
-	if (r == 0) {
-		fd2state[cur_peer]->dev = cur_stat.st_dev;
-		fd2state[cur_peer]->ino = cur_stat.st_ino;
-	}
-#endif
+
 	return r;
 }
 
 
+// special caching open. before calling open(), you have to have
+// called stat() in order to have valid dev/ino pair. This aint a
+// problem since one needs to call stat() beforehand anyways
+// for content-length etc.
 int lonely_http::open()
 {
 	int fd = -1;
