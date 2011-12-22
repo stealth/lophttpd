@@ -355,7 +355,7 @@ int lonely_http::loop()
 					fcntl(afd, F_SETFL, flags|O_NONBLOCK);
 #endif
 
-					// We reuse preveiously allocated but 'cleanup'ed memory to save
+					// We reuse previously allocated but 'cleanup'ed memory to save
 					// speed for lotsa new/delete calls on heavy traffic
 					if (!fd2state[afd]) {
 						fd2state[afd] = new (nothrow) struct status;
@@ -444,7 +444,7 @@ int lonely_http::send_http_header()
 	if (cur_range_requested) {
 		http_header = "HTTP/1.1 206 Partial Content\r\nServer: lophttpd\r\n";
 		char range[256];
-		snprintf(range, sizeof(range), "Content-Range: bytes=%zu-%zu/%zu\r\nDate: ",
+		snprintf(range, sizeof(range), "Content-Range: bytes %zu-%zu/%zu\r\nDate: ",
 		         cur_start_range, cur_end_range, cur_stat.st_size);
 		http_header += range;
 	} else
@@ -1060,7 +1060,7 @@ int lonely_http::handle_request()
 
 	// Range: bytes 0-7350
 	if ((ptr2 = strcasestr(ptr, "Range:")) != NULL) {
-		if (cur_request != HTTP_REQUEST_GET) 
+		if (cur_request != HTTP_REQUEST_GET)
 			return send_error(HTTP_ERROR_416);
 
 		ptr2 += 6;
