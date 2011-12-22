@@ -485,7 +485,7 @@ int lonely_http::send_genindex()
 	http_header += "\r\nContent-Length: %zu\r\n"
                        "Content-Type: text/html\r\n\r\n%s";
 
-	string &p = fd2state[cur_peer]->path;
+	const string &p = fd2state[cur_peer]->path;
 	size_t l = http_header.size() + 128 + NS_Misc::dir2index[p].size();
 	char *h_buf = new (nothrow) char[l];
 	if (!h_buf)
@@ -587,30 +587,52 @@ void lonely_http::log(const string &msg)
 
 int lonely_http::HEAD()
 {
-	fd2state[cur_peer]->keep_alive = 0;
-	string head = "";
+	string head;
+	char content_len[128];
+	size_t cl = 0;
+
+	string logstr = "HEAD ";
+	logstr += fd2state[cur_peer]->path;
+	logstr += "\n";
+	log(logstr);
+
+	if (de_escape_path() < 0)
+		return send_error(HTTP_ERROR_400);
 
 	if (stat() < 0)
 		head = "HTTP/1.1 404 Not Found\r\nDate: ";
 	else {
 		head = "HTTP/1.1 200 OK\r\n";
 
-		// Do not accept Range: for directories or HTML files
-		if (!S_ISREG(cur_stat.st_mode) ||
-		    fd2state[cur_peer]->path.find(".html") != string::npos ||
-		    fd2state[cur_peer]->path.find(".htm") != string::npos)
+		if (S_ISDIR(cur_stat.st_mode)) {
+			string o_path = fd2state[cur_peer]->path;
+			fd2state[cur_peer]->path += "/index.html";
+			if (stat() == 0)
+				cl = cur_stat.st_size;
+			else {
+				map<string, string>::iterator i = NS_Misc::dir2index.find(o_path);
+				if (i == NS_Misc::dir2index.end())
+					cl = 0;
+				else
+					cl = i->second.size();
+				// Not needed, since request is finished here
+				//fd2state[cur_peer]->path = o_path;
+			}
 			head += "Accept-Ranges: none\r\nDate: ";
-		else
-			head += "Accept-Ranges: bytes\r\nDate: ";
+		} else {
+			cl = cur_stat.st_size;
+			if (fd2state[cur_peer]->path.find(".html") != string::npos ||
+		    	    fd2state[cur_peer]->path.find(".htm") != string::npos)
+				head += "Accept-Ranges: none\r\nDate: ";
+			else
+				head += "Accept-Ranges: bytes\r\nDate: ";
+		}
 	}
 
 	head += gmt_date;
-	head += "\r\nServer: lophttpd\r\nConnection: close\r\n\r\n";
-
-	string logstr = "HEAD ";
-	logstr += fd2state[cur_peer]->path;
-	logstr += "\n";
-	log(logstr);
+	snprintf(content_len, sizeof(content_len), "\r\nContent-Length: %zu\r\n", cl);
+	head += content_len;
+	head += "Server: lophttpd\r\nConnection: keep-alive\r\n\r\n";
 
 	if (writen(cur_peer, head.c_str(), head.size()) <= 0)
 		return -1;
