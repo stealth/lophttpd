@@ -445,7 +445,7 @@ int lonely_http::send_http_header()
 		http_header = "HTTP/1.1 206 Partial Content\r\nServer: lophttpd\r\n";
 		char range[256];
 		snprintf(range, sizeof(range), "Content-Range: bytes %zu-%zu/%zu\r\nDate: ",
-		         cur_start_range, cur_end_range, cur_stat.st_size);
+		         cur_start_range, cur_end_range - 1, cur_stat.st_size);
 		http_header += range;
 	} else
 		http_header = "HTTP/1.1 200 OK\r\nServer: lophttpd\r\nDate: ";
@@ -467,8 +467,7 @@ int lonely_http::send_http_header()
 	}
 	if (!content_types[i].c_type.empty())
 		c_type = content_types[i].c_type;
-	snprintf(h_buf, sizeof(h_buf), http_header.c_str(), c_type.c_str(),
-	         cur_end_range - cur_start_range);
+	snprintf(h_buf, sizeof(h_buf), http_header.c_str(), c_type.c_str(), fd2state[cur_peer]->left);
 
 	if (writen(cur_peer, h_buf, strlen(h_buf)) <= 0)
 		return -1;
@@ -1086,6 +1085,11 @@ int lonely_http::handle_request()
 		// dont accept further ranges, one is enough
 		if (*end_ptr2 != '\r')
 			return send_error(HTTP_ERROR_416);
+
+		// Range: is from first byte to last byte _inclusive_; will be subtracted
+		// in header reply later then
+		if (cur_end_range)
+			++cur_end_range;
 		cur_range_requested = 1;
 	}
 
