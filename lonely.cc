@@ -721,9 +721,10 @@ int lonely_http::stat()
 
 	// do not cache stupid filenames which most likely is an attack
 	// to exhaust our cache memory with combinations of ..//../foo etc.
-	if (p.find("..") == string::npos)
-		if (p.find("//") == string::npos)
-			cacheit = 1;
+	if (p.find("/../") == string::npos)
+		if (p.find("///") == string::npos)
+			if (p.find("/./") == string::npos)
+				cacheit = 1;
 
 	map<string, pair<struct stat, int> >::iterator it;
 
