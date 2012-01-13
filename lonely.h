@@ -80,13 +80,6 @@ public:
 };
 
 
-struct peer_file {
-	off_t offset;		// file offset
-	size_t left, copied;	// how much to copy and copied
-	int fd;			// fd to file to send
-	std::string path;
-};
-
 typedef enum {
 	HTTP_ERROR_400 = 0,
 	HTTP_ERROR_401,
@@ -204,6 +197,7 @@ typedef enum {
 	STATE_NONE,
 	STATE_ERROR
 } status_t;
+
 
 struct status {
 	int peer_fd;

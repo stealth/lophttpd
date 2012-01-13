@@ -73,7 +73,7 @@ struct ext2CT {
 	{".data", "application/data"},
 	{".html", "text/html"},
 
-	{".apk", "application/octet-stream"},
+	{".apk", "application/vnd.android.package-archive"},
 	{".avi", "video/x-msvideo"},
 	{".bmp", "image/bmp"},
 	{".bib", "text/x-bibtex"},
