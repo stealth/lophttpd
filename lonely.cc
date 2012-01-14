@@ -148,13 +148,15 @@ bool operator<(const inode &i1, const inode &i2)
 }
 
 
-const char *lonely::why()
+template<typename state_engine>
+const char *lonely<state_engine>::why()
 {
 	return err.c_str();
 }
 
 
-int lonely::init(const string &host, const string &port, int a)
+template<typename state_engine>
+int lonely<state_engine>::init(const string &host, const string &port, int a)
 {
 	cur_time = time(NULL);
 
@@ -189,12 +191,12 @@ int lonely::init(const string &host, const string &port, int a)
 	int flags = fcntl(sock_fd, F_GETFL);
 	fcntl(sock_fd, F_SETFL, flags|O_NONBLOCK);
 
-	fd2state = new (nothrow) struct status*[rl.rlim_cur];
+	fd2state = new (nothrow) state_engine*[rl.rlim_cur];
 	if (!fd2state) {
 		err = "loneley::init::OOM";
 		return -1;
 	}
-	memset(fd2state, 0, rl.rlim_cur*sizeof(struct status*));
+	memset(fd2state, 0, rl.rlim_cur*sizeof(state_engine *));
 
 	pfds = new (nothrow) pollfd[rl.rlim_cur];
 	if (!pfds) {
@@ -211,7 +213,7 @@ int lonely::init(const string &host, const string &port, int a)
 	pfds[sock_fd].fd = sock_fd;
 	pfds[sock_fd].events = POLLIN|POLLOUT;
 
-	fd2state[sock_fd] = new struct status;
+	fd2state[sock_fd] = new state_engine;
 	fd2state[sock_fd]->state = STATE_ACCEPTING;
 	fd2state[sock_fd]->keep_alive = 1;
 
@@ -224,7 +226,8 @@ int lonely::init(const string &host, const string &port, int a)
 }
 
 
-void lonely::shutdown(int fd)
+template<typename state_engine>
+void lonely<state_engine>::shutdown(int fd)
 {
 	if (fd < 0)
 		return;
@@ -236,7 +239,8 @@ void lonely::shutdown(int fd)
 }
 
 
-void lonely::cleanup(int fd)
+template<typename state_engine>
+void lonely<state_engine>::cleanup(int fd)
 {
 	if (fd < 0)
 		return;
@@ -255,7 +259,8 @@ void lonely::cleanup(int fd)
 }
 
 
-void lonely::calc_max_fd()
+template<typename state_engine>
+void lonely<state_engine>::calc_max_fd()
 {
 	for (int i = max_fd; i >= first_fd; --i) {
 		if (pfds[i].fd != -1) {
@@ -362,7 +367,7 @@ int lonely_http::loop()
 					// We reuse previously allocated but 'cleanup'ed memory to save
 					// speed for lotsa new/delete calls on heavy traffic
 					if (!fd2state[afd]) {
-						fd2state[afd] = new (nothrow) struct status;
+						fd2state[afd] = new (nothrow) struct http_state;
 
 						if (!fd2state[afd]) {
 							cleanup(afd);
@@ -421,10 +426,12 @@ int lonely_http::loop()
 const uint8_t lonely_http::timeout_header = 3;
 
 // timeout between shutdown() and close()
-const uint8_t lonely::timeout_closing = 3;
+template<typename state_engine>
+const uint8_t lonely<state_engine>::timeout_closing = 3;
 
 // In which timeframe a new request must arrive after connect/transfer
-const uint8_t lonely::timeout_alive = 30;
+template<typename state_engine>
+const uint8_t lonely<state_engine>::timeout_alive = 30;
 
 
 int lonely_http::open_log(const string &logfile, const string &method, int core = 0)
@@ -1135,4 +1142,8 @@ int lonely_http::handle_request()
 
 	return (this->*action)();
 }
+
+// instantiate a lonely_http with http_state
+template class lonely<http_state>;
+
 

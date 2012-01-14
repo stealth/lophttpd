@@ -46,6 +46,39 @@
 #include "log.h"
 
 
+typedef enum {
+	STATE_CONNECTING = 0,
+	STATE_ACCEPTING,
+	STATE_CONNECTED,
+	STATE_TRANSFERING,
+	STATE_CLOSING,
+	STATE_NONE,
+	STATE_ERROR
+} status_t;
+
+
+// basic state struct needed for an httpd server
+struct http_state {
+	int peer_fd;
+	status_t state;
+	time_t alive_time, header_time;
+	bool keep_alive;
+	off_t offset;
+	size_t copied, left;
+	dev_t dev;
+	ino_t ino;
+	struct sockaddr_in sin;
+	struct sockaddr_in6 sin6;
+	std::string path;
+	int ct;
+
+	http_state()
+	 : peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
+	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), ct(0) {};
+};
+
+
+template<typename state_engine>
 class lonely {
 protected:
 	struct pollfd *pfds;
@@ -56,7 +89,7 @@ protected:
 	time_t cur_time;
 
 	std::string err;
-	struct status **fd2state;
+	state_engine **fd2state;
 
 	static const uint8_t timeout_alive, timeout_closing;
 
@@ -115,7 +148,7 @@ struct inode {
 };
 
 
-class lonely_http : public lonely {
+class lonely_http : public lonely<http_state> {
 private:
 	struct stat cur_stat;
 	off_t cur_start_range;
@@ -185,37 +218,6 @@ public:
 	void clear_cache();
 
 	int loop();
-};
-
-
-typedef enum {
-	STATE_CONNECTING = 0,
-	STATE_ACCEPTING,
-	STATE_CONNECTED,
-	STATE_TRANSFERING,
-	STATE_CLOSING,
-	STATE_NONE,
-	STATE_ERROR
-} status_t;
-
-
-struct status {
-	int peer_fd;
-	status_t state;
-	time_t alive_time, header_time;
-	bool keep_alive;
-	off_t offset;
-	size_t copied, left;
-	dev_t dev;
-	ino_t ino;
-	struct sockaddr_in sin;
-	struct sockaddr_in6 sin6;
-	std::string path;
-	int ct;
-
-	status()
-	 : peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
-	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), ct(0) {};
 };
 
 
