@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2011 Sebastian Krahmer.
+ * Copyright (C) 2008-2012 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,8 +68,8 @@ using namespace NS_Socket;
 struct ext2CT {
 	const std::string extension, c_type;
 } content_types[] = {
-	// This one must be at index 0 and 1, as we keep a cache of
-	// file <-> content-type with and index to this table
+	// This one must be at index 0 and 1, since we keep a cache of
+	// file <-> content-type with an index to this table
 	{".data", "application/data"},
 	{".html", "text/html"},
 
