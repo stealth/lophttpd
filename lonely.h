@@ -49,6 +49,7 @@
 typedef enum {
 	STATE_CONNECTING = 0,
 	STATE_ACCEPTING,
+	STATE_DECIDING,
 	STATE_CONNECTED,
 	STATE_TRANSFERING,
 	STATE_CLOSING,
@@ -75,6 +76,19 @@ struct http_state {
 	http_state()
 	 : peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
 	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), ct(0) {};
+
+	void cleanup()
+	{
+		peer_fd = -1;
+		copied = left = 0;
+		offset = 0;
+		keep_alive = 0;
+		alive_time = header_time = 0;
+		dev = ino = 0;
+		ct = 0;
+		state = STATE_NONE;
+		path.clear();
+	}
 };
 
 
@@ -87,6 +101,8 @@ protected:
 	int af;
 
 	time_t cur_time;
+
+	char gmt_date[64], local_date[64];
 
 	std::string err;
 	state_engine **fd2state;
@@ -147,6 +163,7 @@ struct inode {
 	ino_t ino;
 };
 
+extern std::string http_error_msgs[];
 
 class lonely_http : public lonely<http_state> {
 private:
@@ -158,7 +175,6 @@ private:
 	log_provider *logger;
 	size_t mss;
 
-	char gmt_date[64], local_date[64];
 
 	std::map<inode, int> file_cache;
 

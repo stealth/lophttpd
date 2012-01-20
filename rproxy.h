@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001-2012 Sebastian Krahmer.
+ * Copyright (C) 2012 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,39 +29,84 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _MY_SOCKET_H_
-#define _MY_SOCKET_H_
 
+#ifndef __rproxy_h__
+#define __rproxy_h__
+
+#include <stdio.h>
+#include <poll.h>
+#include <time.h>
 #include <sys/types.h>
-#include <stdint.h>
-#include <string>
-#include <netdb.h>
 #include <sys/socket.h>
+#include <netdb.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
+#include <string>
+#include <stdint.h>
+#include <map>
+#include <utility>
+#include "config.h"
+#include "lonely.h"
+#include "log.h"
 
-namespace NS_Socket {
 
-const char *why();
+// distinguish between client and server side to find out
+// about new requests on a keep-alive connection
+typedef enum {
+	HTTP_NONE = 0,
+	HTTP_CLIENT,
+	HTTP_SERVER
+} http_instance_t;
 
-int nodelay(int sock);
 
-int reuse(int sock);
+struct rproxy_state {
+	int fd, peer_fd, keep_alive;
+	status_t state;
+	time_t last_t;
+	off_t offset;
+	struct sockaddr_in sin;
+	struct sockaddr_in6 sin6;
+	std::string host, path, opath;
+	char buf[4096];
+	size_t blen, req_len;
 
-int dstaddr(int sock, sockaddr_in *dst);
+	http_instance_t type;
 
-int bind_local(int sock, const std::string &h, const std::string &p, bool do_listen, int af = AF_INET);
+	rproxy_state()
+	 : fd(-1), peer_fd(-1), keep_alive(0), state(STATE_ERROR), last_t(0), host(""),
+	   path(""), opath(""), blen(0),
+	   req_len(0), type(HTTP_NONE) {};
 
-int bind_local(int sock, u_int16_t port, bool do_listen, int tries);
+	void cleanup()
+	{
+		fd = peer_fd = -1;
+		state = STATE_NONE;
+		type = HTTP_NONE;
+		host.clear(); path.clear(); opath.clear();
+		blen = req_len = 0;
+		last_t = 0;
+	}
+};
 
-int tcp_connect_nb(const struct addrinfo &, uint16_t);
 
-int finish_connecting(int);
+class rproxy : public lonely<rproxy_state> {
+private:
+	std::map<std::string, struct rproxy_config::backend> client_map;
 
-int readn(int fd, void *buf, size_t len);
+	int mangle_request_header(int);
 
-int writen(int fd, const void *buf, size_t len);
+	int send_error(http_error_code_t);
 
-}; // namespace
+	int de_escape_path(std::string &);
 
-#endif // _MY_SOCKET_H_
+public:
+	rproxy() {};
+
+	virtual ~rproxy() { };
+
+	virtual int loop();
+};
+
+
+#endif
 

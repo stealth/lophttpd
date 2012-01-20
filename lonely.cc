@@ -53,6 +53,7 @@
 #include <arpa/inet.h>
 #include "log.h"
 #include "lonely.h"
+#include "rproxy.h"
 #include "misc.h"
 #include "socket.h"
 #ifdef linux
@@ -249,11 +250,9 @@ void lonely<state_engine>::cleanup(int fd)
 	pfds[fd].events = pfds[fd].revents = 0;
 	close(fd);
 
-	if (fd2state[fd]) {
-		fd2state[fd]->peer_fd = -1;
-		fd2state[fd]->path.clear();
-		fd2state[fd]->state = STATE_NONE;
-	}
+	if (fd2state[fd])
+		fd2state[fd]->cleanup();
+
 	if (max_fd == fd)
 		--max_fd;
 }
@@ -1145,5 +1144,7 @@ int lonely_http::handle_request()
 
 // instantiate a lonely_http with http_state
 template class lonely<http_state>;
+template class lonely<rproxy_state>;
+
 
 

@@ -165,9 +165,9 @@ int bind_local(int sock, u_int16_t port, bool do_listen, int tries)
 }
 
 
-int tcp_connect_nb(struct sockaddr_in sin, uint16_t local_port)
+int tcp_connect_nb(const struct addrinfo &ai, uint16_t local_port)
 {
-	int sock = socket(PF_INET, SOCK_STREAM, 0);
+	int sock = socket(ai.ai_family, ai.ai_socktype, 0);
 	if (sock < 0) {
 		error = "NS_Socket::tcp_connect_nb::socket:";
 		error += strerror(errno);
@@ -194,7 +194,7 @@ int tcp_connect_nb(struct sockaddr_in sin, uint16_t local_port)
 		return -1;
 	}
 
-	if (connect(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0 &&
+	if (connect(sock, ai.ai_addr, ai.ai_addrlen) < 0 &&
 	    errno != EINPROGRESS) {
 		error = "NS_Socket::tcp_connect_nb::fcntl:";
 		error += strerror(errno);
