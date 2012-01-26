@@ -113,6 +113,12 @@ add -I switch *after* -6. You can either run IPv4 or IPv6 in once
 instance, not both. But you can run two lophttpd's: one with IPv4
 and one with IPv6 if needed.
 
+If you operate lophhtpd behind a proxy, you can use the '-B string'
+argument so it automatically generates <base href="string"> argument
+which should be your proxy URL: http://proxy:port/path/.
+The base string must end with '/' character and the index which lhttpd
+generates is relative to this base.
+
 If you have ideas and or offer performance/testing environment please
 drop me an email: sebastian.krahmer [at] gmail [dot] com :-)
 

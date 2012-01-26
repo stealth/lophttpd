@@ -441,7 +441,7 @@ int rproxy::mangle_request_header(int sock)
 
 	// build new header, replacing path and Host
 	string new_hdr = buf;
-	if (path_end - path_begin > mlen && b.path == "/")
+	if (path_end - path_begin > (int)mlen && b.path == "/")
 		new_hdr.replace(path_begin - buf, mlen, "");
 	else
 		new_hdr.replace(path_begin - buf, mlen, b.path);
