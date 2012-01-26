@@ -11,7 +11,7 @@
 
 namespace Config
 {
-	extern std::string root;
+	extern std::string root, base;
 	extern bool gen_index, virtual_hosts, is_chrooted;
 	extern std::string user, logfile, log_provider;
 	extern uid_t user_uid, user_gid;
@@ -32,7 +32,7 @@ struct backend {
 
 
 extern std::map<std::string, std::list<struct backend> > url_map;
-extern std::string user, root, logfile;
+extern std::string user, root, logfile, host, port;
 
 int parse(const std::string &);
 

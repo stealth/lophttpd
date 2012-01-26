@@ -72,13 +72,20 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 	}
 
 	if (typeflag & FTW_D) {
-		string html = "<html><head><title>Index of ";
+		string html = "<html><head>\n";
+		if (Config::base.size() > 0) {
+			html += "<base href=\"";
+			html += Config::base;
+			html += "\">\n";
+		}
+		html += "<title>Index of ";
 		html += fpath;
-		html += "</title></head><body><h1>Index of ";
+		html += "</title>\n";
+		html += "</head>\n<body><h1>Index of ";
 		html += fpath;
 		html += "</h1>";
 		html += "<table border=1><thead><tr><th></th><th>Name</th><th>Last modified</th><th>Size</th></tr>";
-		html += "<th><img src=\"/icons/back.gif\" alt=\"[DIR]\"></th>";
+		html += "<th><img src=\"icons/back.gif\" alt=\"[DIR]\"></th>";
 		html += "<th><a href=\"";
 		html += parent;
 		html += "\">Parent Directory</a></th></tr></thead>";
@@ -91,8 +98,8 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		if (!*basename)
 			return 0;
 
-		html += "<tr><th><img src=\"/icons/folder.gif\" alt=\"[DIR]\"></th>";
-		html += "<th><a href=\"";
+		html += "<tr><th><img src=\"icons/folder.gif\" alt=\"[DIR]\"></th>";
+		html += "<th><a href=\".";
 		html += fpath;
 		html += "\">";
 		html += basename;
@@ -103,8 +110,8 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		dir2index[parent] = html;
 	} else {
 		string &html = dir2index[parent];
-		html += "<tr><th><img src=\"/icons/file.gif\" alt=\"[FILE]\"></th>";
-		html += "<th><a href=\"";
+		html += "<tr><th><img src=\"icons/file.gif\" alt=\"[FILE]\"></th>";
+		html += "<th><a href=\".";
 		html += fpath;
 		html += "\">";
 		html += basename;

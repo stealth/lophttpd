@@ -42,6 +42,8 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/prctl.h>
+#include <sys/capability.h>
 #include <signal.h>
 #include <cstring>
 #include "config.h"
@@ -125,12 +127,12 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	if (chdir(rproxy_config::root.c_str()) < 0)
-		die("chdir");
+	if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0)
+		die("prctl");
 
-	if (chroot(rproxy_config::root.c_str()) < 0) {
+	chdir("/");
+	if (chroot(rproxy_config::root.c_str()) < 0)
 		die("chroot", euid == 0);
-	}
 
 	if (setgid(pw->pw_gid) < 0)
 		die("setgid", euid == 0);
@@ -138,6 +140,22 @@ int main(int argc, char **argv)
 		die("initgroups", euid == 0);
 	if (setuid(pw->pw_uid) < 0)
 		die("setuid", euid == 0);
+
+	cap_t my_caps;
+	cap_value_t cv[2] = {CAP_NET_ADMIN, CAP_NET_BIND_SERVICE};
+
+	if ((my_caps = cap_init()) == NULL)
+		die("cap_init");
+	if (cap_set_flag(my_caps, CAP_EFFECTIVE, 2, cv, CAP_SET) < 0)
+		die("cap_set_flag");
+	if (cap_set_flag(my_caps, CAP_PERMITTED, 2, cv, CAP_SET) < 0)
+		die("cap_set_flag");
+	if (cap_set_proc(my_caps) < 0)
+		die("cap_set_proc");
+	cap_free(my_caps);
+
+	if (chdir("/") < 0)
+		die("chdir");
 
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(sa));
@@ -158,7 +176,7 @@ int main(int argc, char **argv)
 
 	proxy = new rproxy();
 
-	if (proxy->init("127.0.0.1", "1234", AF_INET) < 0) {
+	if (proxy->init(rproxy_config::host, rproxy_config::port, AF_INET) < 0) {
 		exit(1);
 	}
 

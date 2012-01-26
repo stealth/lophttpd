@@ -13,7 +13,7 @@ using namespace std;
 
 namespace Config
 {
-	string root = "/srv/www/htdocs";
+	string root = "/srv/www/htdocs", base = "";
 	bool gen_index = 0, virtual_hosts = 0, is_chrooted = 0;
 	string user = "wwwrun", logfile = "/var/log/lophttpd", log_provider = "file";
 	uid_t user_uid = 99, user_gid = 99;
@@ -33,7 +33,7 @@ string err = "";
 
 map<string, list<struct backend> > url_map;
 string user = "wwwrun", root = "/var/run/empty",
-       logfile = "/var/log/frontend";
+       logfile = "/var/log/frontend", host = "0.0.0.0", port = "80";
 
 int parse(const string &cfile)
 {
@@ -112,6 +112,18 @@ int parse(const string &cfile)
 			// url, or default action wenn keine
 		} else if (strncmp(ptr, "deny", 4) == 0) {
 			// deny GET for regex
+		} else if (strncmp(ptr, "host", 4) == 0) {
+			ptr += 4;
+			while (*ptr == ' ' || *ptr == '\t')
+				++ptr;
+			strtok(ptr, " \t\n#");
+			rproxy_config::host = ptr;
+		} else if (strncmp(ptr, "port", 4) == 0) {
+			ptr += 4;
+			while (*ptr == ' ' || *ptr == '\t')
+				++ptr;
+			strtok(ptr, " \t\n#");
+			port = ptr;
 		}
 	}
 

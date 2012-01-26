@@ -37,6 +37,7 @@
 #include <list>
 #include <new>
 #include <map>
+#include <arpa/inet.h>
 #include "socket.h"
 #include "lonely.h"
 #include "config.h"
@@ -50,6 +51,7 @@ using namespace std;
 int rproxy::loop()
 {
 	int i = 0, wn = 0, r = 0, afd = -1, peer_fd = -1;
+	char from[64];
 	size_t n = 0;
 	time_t now = 0;
 	sockaddr_in sin;
@@ -124,6 +126,10 @@ int rproxy::loop()
 						}
 					}
 
+					if (inet_ntop(af, &sin.sin_addr, from, sizeof(from)) < 0)
+						continue;
+ 
+					fd2state[afd]->from_ip = from;
 					fd2state[afd]->fd = afd;
 					fd2state[afd]->state = STATE_DECIDING;
 					fd2state[afd]->last_t = now;
@@ -136,9 +142,13 @@ int rproxy::loop()
 				}
 				continue;
 			} else if (fd2state[i]->state == STATE_DECIDING) {
-					// allow up to 3s to get header from client
-					if (pfds[i].revents == 0 && now - fd2state[i]->last_t < 3)
+					// allow up to 5s to get header from client
+					if (pfds[i].revents == 0 && now - fd2state[i]->last_t < 5)
 						continue;
+					else if (pfds[i].revents == 0) {
+						cleanup(i);
+						continue;
+					}
 					pfds[i].revents = 0;
 
 					peer_fd = mangle_request_header(i);
@@ -185,10 +195,10 @@ int rproxy::loop()
 					fd2state[peer_fd]->last_t = now;
 
 					pfds[peer_fd].fd = peer_fd;
-					pfds[peer_fd].events = POLLOUT|POLLIN;
+					pfds[peer_fd].events = POLLIN|POLLOUT;
 					pfds[peer_fd].revents = 0;
 
-					pfds[i].events = POLLOUT|POLLIN;
+					pfds[i].events = POLLIN|POLLOUT;
 
 					if (peer_fd > max_fd)
 						max_fd = peer_fd;
@@ -204,6 +214,9 @@ int rproxy::loop()
 				fd2state[i]->state = STATE_CONNECTED;
 				fd2state[i]->last_t = now;
 				pfds[i].fd = i;
+
+				// POLLOUT too, since mangle_request_header() already slurped data
+				// from client
 				pfds[i].events = POLLIN|POLLOUT;
 				pfds[i].revents = 0;
 			} else if (fd2state[i]->state == STATE_CONNECTED) {
@@ -237,7 +250,8 @@ int rproxy::loop()
 							pfds[i].events = POLLIN;
 						}
 						fd2state[fd2state[i]->peer_fd]->blen -= wn;
-					}
+					} else
+						pfds[i].events &= ~POLLOUT;
 				}
 
 				if (pfds[i].revents & POLLIN) {
@@ -314,7 +328,8 @@ int rproxy::mangle_request_header(int sock)
 	int r = 0;
 
 	memset(buf, 0, sizeof(buf));
-	if ((r = recv(sock, buf, sizeof(buf) - 1, MSG_PEEK)) < 0) {
+	errno = 0;
+	if ((r = recv(sock, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
 		if (errno == EAGAIN)
 			return 0;
 		return -1;
@@ -378,9 +393,10 @@ int rproxy::mangle_request_header(int sock)
 		host_end = ptr - 1;
 	}
 
-	de_escape_path(path);
-
-//XXX check client_map[ip_string/path]
+	if (de_escape_path(path) < 0) {
+		send_error(HTTP_ERROR_400);
+		return -1;
+	}
 
 	// Find the longest match for the given path in our URL mapping
 	map<string, list<struct rproxy_config::backend> >::iterator i = url_map.begin(), match = url_map.end();
@@ -400,12 +416,28 @@ int rproxy::mangle_request_header(int sock)
 		return -1;
 	}
 
+
+	bool same_conn = 0;
+	struct rproxy_config::backend b;
+
 	// Is it the same path as in a possible earlier request?
 	// Then we dont need to open a new connection
-	if (match->first == fd2state[sock]->opath)
-		return fd2state[sock]->peer_fd;
+	if (match->first == fd2state[sock]->opath && fd2state[sock]->peer_fd > 0) {
+		same_conn = 1;
+		b = fd2state[sock]->node;
+	} else {
+		// Already decided about a proxy for this IP/path combination?
+		map<pair<string, string>, struct backend>::iterator j =
+			client_map.find(make_pair<string, string>(fd2state[sock]->from_ip, match->first));
 
-	struct rproxy_config::backend b = match->second.front();
+		if (j != client_map.end()) {
+			b = j->second;
+		} else {
+			b = match->second.front();
+			match->second.pop_front();
+			match->second.push_back(b);
+		}
+	}
 
 	// build new header, replacing path and Host
 	string new_hdr = buf;
@@ -440,13 +472,12 @@ int rproxy::mangle_request_header(int sock)
 
 	memcpy(fd2state[sock]->buf, new_hdr.c_str(), new_hdr.size());
 	fd2state[sock]->blen = new_hdr.size();
+
+	if (same_conn)
+		return fd2state[sock]->peer_fd;
+
 	fd2state[sock]->opath = match->first;
-	fd2state[sock]->host = b.host;
-	fd2state[sock]->path = b.path;
-
-	match->second.pop_front();
-	match->second.push_back(b);
-
+	fd2state[sock]->node = b;
 	return tcp_connect_nb(b.ai, 0);
 }
 
@@ -477,6 +508,8 @@ int rproxy::de_escape_path(string &p)
 			c += (10 + c2 - 'A');
 		else
 			c += (c2 - '0');
+		if (c == '\r' || c == 0 || c == '\n')
+			return -1;
 		tmp.push_back(c);
 		p.replace(pos, 3, tmp, 0, 1);
 		tmp = "";

@@ -66,15 +66,16 @@ struct rproxy_state {
 	off_t offset;
 	struct sockaddr_in sin;
 	struct sockaddr_in6 sin6;
-	std::string host, path, opath;
+	struct rproxy_config::backend node;
+	std::string opath, from_ip;
 	char buf[4096];
 	size_t blen, req_len;
 
 	http_instance_t type;
 
 	rproxy_state()
-	 : fd(-1), peer_fd(-1), keep_alive(0), state(STATE_ERROR), last_t(0), host(""),
-	   path(""), opath(""), blen(0),
+	 : fd(-1), peer_fd(-1), keep_alive(0), state(STATE_ERROR), last_t(0),
+	   opath(""), from_ip(""), blen(0),
 	   req_len(0), type(HTTP_NONE) {};
 
 	void cleanup()
@@ -82,7 +83,7 @@ struct rproxy_state {
 		fd = peer_fd = -1;
 		state = STATE_NONE;
 		type = HTTP_NONE;
-		host.clear(); path.clear(); opath.clear();
+		node.host.clear(); node.path.clear(); opath.clear(); from_ip.clear();
 		blen = req_len = 0;
 		last_t = 0;
 	}
@@ -91,7 +92,7 @@ struct rproxy_state {
 
 class rproxy : public lonely<rproxy_state> {
 private:
-	std::map<std::string, struct rproxy_config::backend> client_map;
+	std::map<std::pair<std::string, std::string>, struct rproxy_config::backend> client_map;
 
 	int mangle_request_header(int);
 

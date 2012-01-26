@@ -1,5 +1,6 @@
 CXX=c++ -Wall -O2 -DGETFL_OPTIMIZATION
 LD=c++
+LIBS=-lrt -lcap
 
 all: frontend
 
@@ -10,7 +11,7 @@ distclean: clean
 	rm -f frontend
 
 frontend: lonely.o socket.o frontend-main.o log.o multicore.o rproxy.o config.o misc.o
-	$(LD) lonely.o socket.o frontend-main.o misc.o log.o multicore.o rproxy.o config.o -o frontend -lrt
+	$(LD) lonely.o socket.o frontend-main.o misc.o log.o multicore.o rproxy.o config.o -o frontend $(LIBS)
 
 multicore.o: multicore.cc multicore.h
 	$(CXX) -c multicore.cc

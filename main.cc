@@ -63,9 +63,10 @@ void die(const char *s, bool please_die = 1)
 
 void help(const char *p)
 {
-	cerr<<"Usage: "<<p<<" [-6] [-R web-root] [-iHh] [-I IP] [-u user] [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n\n"
+	cerr<<"Usage: "<<p<<" [-6] [-R web-root] [-B html-base-tag] [-iHh] [-I IP] [-u user] [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n\n"
 	    <<"\t\t -6 : use IPv6, default is IPv4\n"
 	    <<"\t\t -R : web-root, default "<<Config::root<<endl
+	    <<"\t\t -B : <base> 'http://...' tag, if operating behind a proxy\n"
 	    <<"\t\t -i : use autoindexing\n"
 	    <<"\t\t -I : IP(6) to bind to, default {INADDR_ANY}\n"
 	    <<"\t\t -H : use vhosts (requires vhost setup in web-root)\n"
@@ -121,7 +122,7 @@ int main(int argc, char **argv)
 		cerr<<"Continuing in UNSAFE mode!\n\n";
 	}
 
-	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6")) != -1) {
+	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:")) != -1) {
 		switch (c) {
 		case '6':
 			Config::host = "::0";
@@ -156,6 +157,9 @@ int main(int argc, char **argv)
 			break;
 		case 'S':
 			Config::mss = strtoul(optarg, NULL, 10);
+			break;
+		case 'B':
+			Config::base = optarg;
 			break;
 		case 'h':
 		default:
