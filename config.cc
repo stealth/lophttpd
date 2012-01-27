@@ -140,12 +140,3 @@ const char *why()
 
 }
 
-/*
-int main()
-{
-	rproxy_config::parse("./x");
-	std::cerr<<rproxy_config::why()<<std::endl;
-	return 0;
-}
-*/
-

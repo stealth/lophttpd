@@ -36,6 +36,8 @@ extern std::string user, root, logfile, host, port;
 
 int parse(const std::string &);
 
+const char *why();
+
 }
 
 #endif
