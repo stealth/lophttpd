@@ -62,7 +62,7 @@ typedef enum {
 struct rproxy_state {
 	int fd, peer_fd, keep_alive;
 	status_t state;
-	time_t last_t;
+	time_t last_t, header_time;
 	off_t offset;
 	struct sockaddr_in sin;
 	struct sockaddr_in6 sin6;
@@ -74,7 +74,7 @@ struct rproxy_state {
 	http_instance_t type;
 
 	rproxy_state()
-	 : fd(-1), peer_fd(-1), keep_alive(0), state(STATE_ERROR), last_t(0),
+	 : fd(-1), peer_fd(-1), keep_alive(0), state(STATE_ERROR), last_t(0), header_time(0),
 	   opath(""), from_ip(""), blen(0),
 	   req_len(0), type(HTTP_NONE) {};
 
@@ -85,7 +85,7 @@ struct rproxy_state {
 		type = HTTP_NONE;
 		node.host.clear(); node.path.clear(); opath.clear(); from_ip.clear();
 		blen = req_len = 0;
-		last_t = 0;
+		last_t = header_time = 0;
 	}
 };
 
@@ -99,6 +99,8 @@ private:
 	int send_error(http_error_code_t);
 
 	int de_escape_path(std::string &);
+
+	static const uint8_t timeout_header;
 
 public:
 	rproxy() {};

@@ -65,12 +65,6 @@ void die(const char *s, bool please_die = 1)
 }
 
 
-void help(const char *p)
-{
-	exit(errno);
-}
-
-
 void close_fds()
 {
 	struct rlimit rl;
@@ -83,6 +77,7 @@ void close_fds()
 	open("/dev/null", O_RDWR);
 	dup2(0, 1);
 }
+
 
 static rproxy *proxy = NULL;
 
@@ -104,7 +99,15 @@ int main(int argc, char **argv)
 
 	uid_t euid = geteuid();
 
-	rproxy_config::parse("x");
+	if (argc != 2) {
+		cerr<<"Usage: frontend <config-file>\n";
+		return 1;
+	}
+
+	if (rproxy_config::parse(argv[1]) < 0) {
+		cerr<<rproxy_config::why()<<endl;
+		return -1;
+	}
 
 	tzset();
 	nice(-20);
@@ -172,12 +175,13 @@ int main(int argc, char **argv)
 
 	if (fork() > 0)
 		exit(0);
+
 	setsid();
 
-	proxy = new rproxy();
+	proxy = new (nothrow) rproxy();
 
 	if (proxy->init(rproxy_config::host, rproxy_config::port, AF_INET) < 0) {
-		exit(1);
+		exit(-1);
 	}
 
 	for (;;)

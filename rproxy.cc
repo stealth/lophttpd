@@ -48,12 +48,14 @@ using namespace rproxy_config;
 using namespace NS_Socket;
 using namespace std;
 
+const uint8_t rproxy::timeout_header = 5;
+
+
 int rproxy::loop()
 {
 	int i = 0, wn = 0, r = 0, afd = -1, peer_fd = -1;
 	char from[64];
 	size_t n = 0;
-	time_t now = 0;
 	sockaddr_in sin;
 	socklen_t slen = sizeof(sin);
 
@@ -61,7 +63,7 @@ int rproxy::loop()
 		if (poll(pfds, max_fd + 1, 1000) < 0)
 			continue;
 
-		now = time(NULL);
+		cur_time = time(NULL);
 
 		// assert: pfds[i].fd == i
 		for (i = first_fd; i <= max_fd; ++i) {
@@ -72,7 +74,7 @@ int rproxy::loop()
 				continue;
 
 			// timeout hanging connections (with pending data) but not accepting socket
-			if (now - fd2state[i]->last_t >= 20 &&
+			if (cur_time - fd2state[i]->last_t >= 20 &&
 			    fd2state[i]->state != STATE_ACCEPTING &&
 			    fd2state[i]->blen > 0) {
 				cleanup(fd2state[i]->peer_fd);
@@ -86,7 +88,7 @@ int rproxy::loop()
 				continue;
 			}
 
-			if (pfds[i].revents == 0 && fd2state[i]->state != STATE_DECIDING)
+			if (pfds[i].revents == 0)
 				continue;
 
 			cur_peer = i;
@@ -132,7 +134,7 @@ int rproxy::loop()
 					fd2state[afd]->from_ip = from;
 					fd2state[afd]->fd = afd;
 					fd2state[afd]->state = STATE_DECIDING;
-					fd2state[afd]->last_t = now;
+					fd2state[afd]->last_t = cur_time;
 					fd2state[afd]->sin = sin;
 
 					pfds[i].events = POLLOUT|POLLIN;
@@ -142,14 +144,40 @@ int rproxy::loop()
 				}
 				continue;
 			} else if (fd2state[i]->state == STATE_DECIDING) {
-					// allow up to 5s to get header from client
-					if (pfds[i].revents == 0 && now - fd2state[i]->last_t < 5)
-						continue;
-					else if (pfds[i].revents == 0) {
-						cleanup(i);
+					// Also in DECIDING state, there might be response from server
+					// to be sent to client
+					if (pfds[i].revents & POLLOUT) {
+						// actually data to send?
+						if ((n = fd2state[fd2state[i]->peer_fd]->blen) > 0) {
+							wn = writen(i, fd2state[fd2state[i]->peer_fd]->buf, n);
+							if (wn == 0) {
+								shutdown(fd2state[i]->peer_fd);
+								shutdown(i);
+								continue;
+							} else if (wn < 0) {
+								cleanup(fd2state[i]->peer_fd);
+								cleanup(i);
+								continue;
+							}
+							// non blocking write couldnt write it all at once
+							if (wn != (int)n) {
+								memmove(fd2state[fd2state[i]->peer_fd]->buf,
+								        fd2state[fd2state[i]->peer_fd]->buf + wn,
+								         n - wn);
+								pfds[i].events = POLLOUT|POLLIN;
+							} else {
+								pfds[i].events = POLLIN;
+							}
+							fd2state[fd2state[i]->peer_fd]->blen -= wn;
+						} else
+							pfds[i].events &= ~POLLOUT;
+						pfds[i].revents = 0;
 						continue;
 					}
+
 					pfds[i].revents = 0;
+
+					// else, there is POLLIN
 
 					peer_fd = mangle_request_header(i);
 
@@ -157,7 +185,6 @@ int rproxy::loop()
 						pfds[i].events = POLLIN;
 						continue;
 					} else if (peer_fd < 0) {
-						err = "proxy::loop::mangle_request_header:";
 						cleanup(fd2state[i]->peer_fd);
 						cleanup(i);
 						continue;
@@ -172,7 +199,7 @@ int rproxy::loop()
 					}
 
 					fd2state[i]->state = STATE_CONNECTED;
-					fd2state[i]->last_t = now;
+					fd2state[i]->last_t = cur_time;
 					fd2state[i]->type = HTTP_CLIENT;
 
 					if (!fd2state[peer_fd]) {
@@ -192,7 +219,7 @@ int rproxy::loop()
 						fd2state[peer_fd]->type = HTTP_SERVER;
 					}
 
-					fd2state[peer_fd]->last_t = now;
+					fd2state[peer_fd]->last_t = cur_time;
 
 					pfds[peer_fd].fd = peer_fd;
 					pfds[peer_fd].events = POLLIN|POLLOUT;
@@ -212,7 +239,7 @@ int rproxy::loop()
 					continue;
 				}
 				fd2state[i]->state = STATE_CONNECTED;
-				fd2state[i]->last_t = now;
+				fd2state[i]->last_t = cur_time;
 				pfds[i].fd = i;
 
 				// POLLOUT too, since mangle_request_header() already slurped data
@@ -272,7 +299,8 @@ int rproxy::loop()
 							fd2state[i]->state = STATE_DECIDING;
 							pfds[i].events = POLLIN;
 							pfds[i].revents = 0;
-							fd2state[i]->last_t = now;
+							fd2state[i]->last_t = cur_time;
+							fd2state[i]->header_time = 0;
 							continue;
 						}
 
@@ -295,6 +323,7 @@ int rproxy::loop()
 						fd2state[i]->req_len -= r;
 						if (fd2state[i]->req_len == 0) {
 							fd2state[i]->state = STATE_DECIDING;
+							fd2state[i]->header_time = 0;
 						}
 					}
 
@@ -305,8 +334,8 @@ int rproxy::loop()
 				}
 
 				pfds[i].revents= 0;
-				fd2state[i]->last_t = now;
-				fd2state[fd2state[i]->peer_fd]->last_t = now;
+				fd2state[i]->last_t = cur_time;
+				fd2state[fd2state[i]->peer_fd]->last_t = cur_time;
 			} else if (fd2state[i]->state == STATE_CLOSING) {
 				cleanup(i);
 			}
@@ -335,8 +364,17 @@ int rproxy::mangle_request_header(int sock)
 		return -1;
 	}
 
-	if ((ptr = strstr(buf, "\r\n\r\n")) == NULL)
+	// If first read, set initial timestamp for header TO
+	if (fd2state[cur_peer]->header_time == 0)
+		fd2state[cur_peer]->header_time = cur_time;
+
+	if ((ptr = strstr(buf, "\r\n\r\n")) == NULL) {
+		if (cur_time - fd2state[cur_peer]->header_time > timeout_header) {
+			send_error(HTTP_ERROR_400);
+			return -1;
+		}
 		return 0;
+	}
 
 	size_t hlen = ptr - buf + 4;
 	end_ptr = buf + hlen;
@@ -345,8 +383,15 @@ int rproxy::mangle_request_header(int sock)
 		send_error(HTTP_ERROR_500);
 		return -1;
 	}
+	buf[hlen] = 0;
 
 	if ((ptr = strstr(buf, "/")) == NULL) {
+		send_error(HTTP_ERROR_400);
+		return -1;
+	}
+
+	// Path must start inside the first line
+	if (strchr(buf, '\n') <= ptr) {
 		send_error(HTTP_ERROR_400);
 		return -1;
 	}
@@ -366,8 +411,9 @@ int rproxy::mangle_request_header(int sock)
 		return -1;
 	}
 
-	if ((ptr = strcasestr(buf, "Content-Length:"))) {
-		if (ptr + 20 >= end_ptr) {
+	fd2state[sock]->req_len = 0;
+	if ((ptr = strcasestr(buf, "\nContent-Length:"))) {
+		if (ptr + 21 >= end_ptr) {
 			send_error(HTTP_ERROR_400);
 			return -1;
 		}
@@ -377,8 +423,8 @@ int rproxy::mangle_request_header(int sock)
 			return -1;
 		}
 	}
-	if ((ptr = strcasestr(buf, "Host:"))) {
-		ptr += 5;
+	if ((ptr = strcasestr(buf, "\nHost:"))) {
+		ptr += 6;
 		host_begin = ptr;
 		if (ptr + 2 >= end_ptr) {
 			send_error(HTTP_ERROR_400);
@@ -390,10 +436,10 @@ int rproxy::mangle_request_header(int sock)
 			send_error(HTTP_ERROR_400);
 			return -1;
 		}
-		host_end = ptr - 1;
+		host_end = ptr;
 	}
 
-	if (de_escape_path(path) < 0) {
+	if (de_escape_path(path) < 0 || host_begin <= path_begin) {
 		send_error(HTTP_ERROR_400);
 		return -1;
 	}
@@ -439,13 +485,10 @@ int rproxy::mangle_request_header(int sock)
 		}
 	}
 
-	// build new header, replacing path and Host
+	// build new header, replacing Path and Host
+	// Replace Host: first, so the offsets dont become invalid,
+	// since Host: is located after Path
 	string new_hdr = buf;
-	if (path_end - path_begin > (int)mlen && b.path == "/")
-		new_hdr.replace(path_begin - buf, mlen, "");
-	else
-		new_hdr.replace(path_begin - buf, mlen, b.path);
-
 	if (host_begin) {
 		string s = b.host;
 		if (b.port != 80) {
@@ -466,6 +509,13 @@ int rproxy::mangle_request_header(int sock)
 		// replace \r\n\r\n by Host: ...\r\n\r\n
 		new_hdr.replace(hlen - 4, 4, s);
 	}
+
+	if (path_end - path_begin > (int)mlen && b.path == "/")
+		new_hdr.replace(path_begin - buf, mlen, "");
+	else
+		new_hdr.replace(path_begin - buf, mlen, b.path);
+
+
 	//XXX X-Forwarded-For
 
 	if (new_hdr.size() >= sizeof(fd2state[sock]->buf)) {

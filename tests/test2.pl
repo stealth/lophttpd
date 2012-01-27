@@ -9,7 +9,7 @@ my $peer = new IO::Socket::INET->new(PeerAddr => $host,
 	Proto => 'tcp') or die $!;
 
 my $msg=<<EOH;
-HEAD / HTTP/1.1\r\nHost: $host\r\n\r\n
+HEAD / HTTP/1.1\r\nHost: $host\r\n\r
 EOH
 
 print $peer $msg;

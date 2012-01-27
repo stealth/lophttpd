@@ -969,7 +969,10 @@ int lonely_http::handle_request()
 		return -1;
 	}
 
-	end_ptr = ptr + n;
+	end_ptr = req_buf + n;
+
+	// At most sizeof(req_buf)-1
+	req_buf[n] = 0;
 
 	fd2state[cur_peer]->keep_alive = 0;
 	int (lonely_http::*action)() = NULL;
