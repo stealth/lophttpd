@@ -76,7 +76,7 @@ int rproxy::loop()
 			// timeout hanging connections (with pending data) but not accepting socket
 			if (cur_time - fd2state[i]->last_t >= 20 &&
 			    fd2state[i]->state != STATE_ACCEPTING &&
-			    fd2state[i]->blen > 0) {
+			    (fd2state[i]->blen > 0 || fd2state[i]->state == STATE_DECIDING)) {
 				cleanup(fd2state[i]->peer_fd);
 				cleanup(i);
 				continue;
@@ -130,7 +130,7 @@ int rproxy::loop()
 
 					if (inet_ntop(af, &sin.sin_addr, from, sizeof(from)) < 0)
 						continue;
- 
+
 					fd2state[afd]->from_ip = from;
 					fd2state[afd]->fd = afd;
 					fd2state[afd]->state = STATE_DECIDING;
@@ -356,6 +356,7 @@ int rproxy::mangle_request_header(int sock)
 	     *path_end = NULL, *host_begin = NULL, *host_end = NULL;
 	int r = 0;
 
+
 	memset(buf, 0, sizeof(buf));
 	errno = 0;
 	if ((r = recv(sock, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
@@ -385,16 +386,27 @@ int rproxy::mangle_request_header(int sock)
 	}
 	buf[hlen] = 0;
 
-	if ((ptr = strstr(buf, "/")) == NULL) {
+	if (strncasecmp(buf, "GET", 3) != 0 && strncasecmp(buf, "POST", 4) != 0 &&
+	    strncasecmp(buf, "HEAD", 4) != 0 && strncasecmp(buf, "OPTIONS", 7) != 0) {
+		send_error(HTTP_ERROR_405);
+		return -1;
+	}
+
+	ptr = buf;
+	while (*ptr != ' ' && *ptr)
+		++ptr;
+	if (ptr >= end_ptr) {
+		send_error(HTTP_ERROR_400);
+		return -1;
+	}
+	while (*ptr == ' ')
+		++ptr;
+	if (ptr >= end_ptr || *ptr != '/') {
 		send_error(HTTP_ERROR_400);
 		return -1;
 	}
 
-	// Path must start inside the first line
-	if (strchr(buf, '\n') <= ptr) {
-		send_error(HTTP_ERROR_400);
-		return -1;
-	}
+	const string &from_ip = fd2state[sock]->from_ip;
 
 	path_begin = ptr;
 	if ((path_end = strchr(ptr, '?')) == NULL) {
@@ -423,6 +435,10 @@ int rproxy::mangle_request_header(int sock)
 			return -1;
 		}
 	}
+	// smash any existing X-Forward entries
+	while ((ptr = strcasestr(buf, "\nX-Forwarded-For"))) {
+		*ptr = 'Y';
+	}
 	if ((ptr = strcasestr(buf, "\nHost:"))) {
 		ptr += 6;
 		host_begin = ptr;
@@ -439,7 +455,7 @@ int rproxy::mangle_request_header(int sock)
 		host_end = ptr;
 	}
 
-	if (de_escape_path(path) < 0 || host_begin <= path_begin) {
+	if (de_escape_path(path) < 0) {
 		send_error(HTTP_ERROR_400);
 		return -1;
 	}
@@ -474,7 +490,7 @@ int rproxy::mangle_request_header(int sock)
 	} else {
 		// Already decided about a proxy for this IP/path combination?
 		map<pair<string, string>, struct backend>::iterator j =
-			client_map.find(make_pair<string, string>(fd2state[sock]->from_ip, match->first));
+			client_map.find(make_pair<string, string>(from_ip, match->first));
 
 		if (j != client_map.end()) {
 			b = j->second;
@@ -482,6 +498,7 @@ int rproxy::mangle_request_header(int sock)
 			b = match->second.front();
 			match->second.pop_front();
 			match->second.push_back(b);
+			client_map[make_pair<string, string>(from_ip, match->first)] = b;
 		}
 	}
 
@@ -506,8 +523,8 @@ int rproxy::mangle_request_header(int sock)
 			s += p;
 		}
 		s += "\r\n\r\n";
-		// replace \r\n\r\n by Host: ...\r\n\r\n
-		new_hdr.replace(hlen - 4, 4, s);
+		// replace \r\n\r\n by \r\nHost: ...\r\n\r\n
+		new_hdr.replace(hlen - 2, 2, s);
 	}
 
 	if (path_end - path_begin > (int)mlen && b.path == "/")
@@ -516,7 +533,10 @@ int rproxy::mangle_request_header(int sock)
 		new_hdr.replace(path_begin - buf, mlen, b.path);
 
 
-	//XXX X-Forwarded-For
+	string xfwd = "X-Forwarded-For: ";
+	xfwd += from_ip;
+	xfwd += "\r\n\r\n";
+	new_hdr.replace(new_hdr.size() - 2, 2, xfwd);
 
 	if (new_hdr.size() >= sizeof(fd2state[sock]->buf)) {
 		send_error(HTTP_ERROR_414);

@@ -90,8 +90,6 @@ void sigusr1(int x)
 
 int main(int argc, char **argv)
 {
-	int c = 0;
-
 	if (getuid() != 0) {
 		cerr<<"\a!!! WARNING: !!! Must be called as root in order to chroot() and drop privs properly!\n";
 		cerr<<"Continuing in UNSAFE mode!\n\n";
