@@ -65,18 +65,18 @@ void help(const char *p)
 {
 	cerr<<"Usage: "<<p<<" [-6] [-R web-root] [-B html-base-tag] [-iHh] [-I IP] [-u user] [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n\n"
 	    <<"\t\t -6 : use IPv6, default is IPv4\n"
-	    <<"\t\t -R : web-root, default "<<Config::root<<endl
+	    <<"\t\t -R : web-root, default "<<httpd_config::root<<endl
 	    <<"\t\t -B : <base> 'http://...' tag, if operating behind a proxy\n"
 	    <<"\t\t -i : use autoindexing\n"
 	    <<"\t\t -I : IP(6) to bind to, default {INADDR_ANY}\n"
 	    <<"\t\t -H : use vhosts (requires vhost setup in web-root)\n"
 	    <<"\t\t -h : this help\n"
-	    <<"\t\t -u : run as this user, default "<<Config::user<<endl
-	    <<"\t\t -l : logfile, default "<<Config::logfile<<endl
-	    <<"\t\t -L : logprovider, default "<<Config::log_provider<<endl
+	    <<"\t\t -u : run as this user, default "<<httpd_config::user<<endl
+	    <<"\t\t -l : logfile, default "<<httpd_config::logfile<<endl
+	    <<"\t\t -L : logprovider, default "<<httpd_config::log_provider<<endl
 	    <<"\t\t -n : number of CPU cores to use, default all"<<endl
-	    <<"\t\t -p : port, default "<<Config::port<<endl
-	    <<"\t\t -S : sendfile() chunksize (no need to change), default: "<<Config::mss<<endl<<endl;
+	    <<"\t\t -p : port, default "<<httpd_config::port<<endl
+	    <<"\t\t -S : sendfile() chunksize (no need to change), default: "<<httpd_config::mss<<endl<<endl;
 	exit(errno);
 }
 
@@ -101,12 +101,12 @@ void sigusr1(int x)
 	if (!httpd)
 		return;
 
-	if (Config::gen_index) {
+	if (httpd_config::gen_index) {
 		NS_Misc::dir2index.clear();
-		if (Config::is_chrooted)
+		if (httpd_config::is_chrooted)
 			NS_Misc::generate_index("/");
 		else
-			NS_Misc::generate_index(Config::root);
+			NS_Misc::generate_index(httpd_config::root);
 	}
 	httpd->clear_cache();
 }
@@ -125,41 +125,41 @@ int main(int argc, char **argv)
 	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:")) != -1) {
 		switch (c) {
 		case '6':
-			Config::host = "::0";
-			Config::af = AF_INET6;
+			httpd_config::host = "::0";
+			httpd_config::af = AF_INET6;
 			break;
 		case 'i':
-			Config::gen_index = 1;
+			httpd_config::gen_index = 1;
 			break;
 		case 'R':
-			Config::root = optarg;
+			httpd_config::root = optarg;
 			break;
 		case 'H':
-			Config::virtual_hosts = 1;
+			httpd_config::virtual_hosts = 1;
 			break;
 		case 'u':
-			Config::user = optarg;
+			httpd_config::user = optarg;
 			break;
 		case 'I':
-			Config::host = optarg;
+			httpd_config::host = optarg;
 			break;
 		case 'p':
-			Config::port = optarg;
+			httpd_config::port = optarg;
 			break;
 		case 'l':
-			Config::logfile = optarg;
+			httpd_config::logfile = optarg;
 			break;
 		case 'L':
-			Config::log_provider = optarg;
+			httpd_config::log_provider = optarg;
 			break;
 		case 'n':
-			Config::cores = strtoul(optarg, NULL, 10);
+			httpd_config::cores = strtoul(optarg, NULL, 10);
 			break;
 		case 'S':
-			Config::mss = strtoul(optarg, NULL, 10);
+			httpd_config::mss = strtoul(optarg, NULL, 10);
 			break;
 		case 'B':
-			Config::base = optarg;
+			httpd_config::base = optarg;
 			break;
 		case 'h':
 		default:
@@ -173,59 +173,59 @@ int main(int argc, char **argv)
 	nice(-20);
 	close_fds();
 
-	httpd = new (nothrow) lonely_http(Config::mss);
+	httpd = new (nothrow) lonely_http(httpd_config::mss);
 	if (!httpd) {
 		cerr<<"OOM: Cannot create webserver object!\n";
 		return -1;
 	}
 
-	if (httpd->init(Config::host, Config::port, Config::af) < 0) {
+	if (httpd->init(httpd_config::host, httpd_config::port, httpd_config::af) < 0) {
 		cerr<<httpd->why()<<endl;
 		return -1;
 	}
 
 	// Needs to be called before chroot
 	NS_Misc::init_multicore();
-	NS_Misc::setup_multicore(Config::cores);
+	NS_Misc::setup_multicore(httpd_config::cores);
 
 	// Every core has its own logfile to avoid locking
-	if (httpd->open_log(Config::logfile, Config::log_provider, NS_Misc::my_core) < 0) {
+	if (httpd->open_log(httpd_config::logfile, httpd_config::log_provider, NS_Misc::my_core) < 0) {
 		cerr<<"Opening logfile: "<<httpd->why()<<endl;
 		return -1;
 	}
 
-	struct passwd *pw = getpwnam(Config::user.c_str());
+	struct passwd *pw = getpwnam(httpd_config::user.c_str());
 	if (!pw) {
-		cerr<<"Fatal: Unknown user '"<<Config::user<<"'. Exiting.\n";
+		cerr<<"Fatal: Unknown user '"<<httpd_config::user<<"'. Exiting.\n";
 		return -1;
 	}
-	Config::user_uid = pw->pw_uid;
-	Config::user_gid = pw->pw_gid;
+	httpd_config::user_uid = pw->pw_uid;
+	httpd_config::user_gid = pw->pw_gid;
 
-	if (chdir(Config::root.c_str()) < 0)
+	if (chdir(httpd_config::root.c_str()) < 0)
 		die("chdir");
 
-	if (chroot(Config::root.c_str()) < 0) {
+	if (chroot(httpd_config::root.c_str()) < 0) {
 		die("chroot", euid == 0);
 	} else
-		Config::is_chrooted = 1;
+		httpd_config::is_chrooted = 1;
 
-	if (Config::gen_index) {
-		if (Config::is_chrooted)
+	if (httpd_config::gen_index) {
+		if (httpd_config::is_chrooted)
 			NS_Misc::generate_index("/");
 		else
-			NS_Misc::generate_index(Config::root);
+			NS_Misc::generate_index(httpd_config::root);
 	}
 
 
 	if (setgid(pw->pw_gid) < 0)
 		die("setgid", euid == 0);
-	if (initgroups(Config::user.c_str(), pw->pw_gid) < 0)
+	if (initgroups(httpd_config::user.c_str(), pw->pw_gid) < 0)
 		die("initgroups", euid == 0);
 	if (setuid(pw->pw_uid) < 0)
 		die("setuid", euid == 0);
 
-	if (Config::virtual_hosts)
+	if (httpd_config::virtual_hosts)
 		httpd->vhosts = 1;
 
 	struct sigaction sa;
@@ -241,7 +241,7 @@ int main(int argc, char **argv)
 
 	dup2(0, 2);
 
-	if (Config::master) {
+	if (httpd_config::master) {
 		if (fork() > 0)
 			exit(0);
 		setsid();

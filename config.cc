@@ -11,7 +11,7 @@
 using namespace std;
 
 
-namespace Config
+namespace httpd_config
 {
 	string root = "/srv/www/htdocs", base = "";
 	bool gen_index = 0, virtual_hosts = 0, is_chrooted = 0;
@@ -32,8 +32,9 @@ namespace rproxy_config {
 string err = "";
 
 map<string, list<struct backend> > url_map;
+map<string, string> location_map;
 string user = "wwwrun", root = "/var/run/empty",
-       logfile = "/var/log/frontend", host = "0.0.0.0", port = "80";
+       logfile = "/var/log/frontend", host = "0.0.0.0", port = "80", location = "";
 
 int parse(const string &cfile)
 {
@@ -70,9 +71,15 @@ int parse(const string &cfile)
 
 			memset(host, 0, sizeof(host));
 			memset(path, 0, sizeof(path));
-			if (sscanf(ptr, "http://%255[^:]:%hu/%255c", host, &b.port, path) == 0) {
-				err = "rproxy_config::parse::sscanf: invalid 'map' config.";
-				return -1;
+			if (strchr(ptr + 5, ':')) {
+				if (sscanf(ptr, "http://%255[^:]:%hu/%255c", host, &b.port, path) == 0) {
+					err = "rproxy_config::parse::sscanf: invalid 'map' config.";
+					return -1;
+				}
+			} else {
+				if (sscanf(ptr, "http://%255[^/]/%255c", host, path) == 0) {
+				}
+				b.port = 80;
 			}
 
 			b.host = host;
@@ -87,7 +94,7 @@ int parse(const string &cfile)
 			}
 			b.ai = *ai;
 			url_map[opath].push_back(b);
-
+			location_map[ptr] = opath;
 		} else if (strncmp(ptr, "user", 4) == 0) {
 			ptr += 4;
 			while (*ptr == ' ' || *ptr == '\t')
@@ -106,8 +113,12 @@ int parse(const string &cfile)
 				++ptr;
 			strtok(ptr, " \t\n#");
 			logfile = ptr;
-		} else if (strncmp(ptr, "cores", 5) == 0) {
-
+		} else if (strncmp(ptr, "location", 8) == 0) {
+			ptr += 8;
+			while (*ptr == ' ' || *ptr == '\t')
+				++ptr;
+			strtok(ptr, " \t\n#");
+			location = ptr;
 		} else if (strncmp(ptr, "notfound", 8) == 0) {
 			// url, or default action wenn keine
 		} else if (strncmp(ptr, "deny", 4) == 0) {

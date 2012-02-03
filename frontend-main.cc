@@ -55,7 +55,6 @@
 
 using namespace std;
 
-//template class lonely<rproxy_state>;
 
 void die(const char *s, bool please_die = 1)
 {
@@ -110,10 +109,6 @@ int main(int argc, char **argv)
 	tzset();
 	nice(-20);
 	close_fds();
-
-	// Needs to be called before chroot
-	//NS_Misc::init_multicore();
-	//NS_Misc::setup_multicore(Config::cores);
 
 	/* Every core has its own logfile to avoid locking
 	if (httpd->open_log(Config::logfile, Config::log_provider, NS_Misc::my_core) < 0) {

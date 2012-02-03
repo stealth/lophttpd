@@ -73,7 +73,7 @@ int rproxy::loop()
 			if (!fd2state[i])
 				continue;
 
-			// timeout hanging connections (with pending data) but not accepting socket
+			// timeout hanging connections (with pending data) but not accepting cur_peeret
 			if (cur_time - fd2state[i]->last_t >= 20 &&
 			    fd2state[i]->state != STATE_ACCEPTING &&
 			    (fd2state[i]->blen > 0 || fd2state[i]->state == STATE_DECIDING)) {
@@ -179,7 +179,7 @@ int rproxy::loop()
 
 					// else, there is POLLIN
 
-					peer_fd = mangle_request_header(i);
+					peer_fd = mangle_request_header();
 
 					if (peer_fd == 0) {
 						pfds[i].events = POLLIN;
@@ -318,6 +318,8 @@ int rproxy::loop()
 						continue;
 					}
 
+					fd2state[i]->blen = r;
+
 					// ... to change state again after each request
 					if (fd2state[i]->type == HTTP_CLIENT) {
 						fd2state[i]->req_len -= r;
@@ -325,9 +327,12 @@ int rproxy::loop()
 							fd2state[i]->state = STATE_DECIDING;
 							fd2state[i]->header_time = 0;
 						}
+					// server replies need to be Location: mapped
+					} else {
+						r = mangle_server_reply();
 					}
 
-					fd2state[i]->blen = r;
+
 					// peer has data to write
 					pfds[fd2state[i]->peer_fd].events = POLLOUT|POLLIN;
 					pfds[i].events = POLLIN;
@@ -348,9 +353,59 @@ int rproxy::loop()
 }
 
 
+int rproxy::mangle_server_reply()
+{
+	if (fd2state[cur_peer]->type != HTTP_SERVER)
+		return 0;
+
+	char *hdr_end = NULL, *location = NULL, *nl = NULL, *buf = fd2state[cur_peer]->buf;
+	size_t blen = fd2state[cur_peer]->blen;
+
+	// A real server reply header?
+	if (strncmp(buf, "HTTP", 4) != 0)
+		return 0;
+	if ((hdr_end = strstr(buf, "\r\n\r\n")) == NULL)
+		return 0;
+	if ((size_t)(hdr_end - buf) >= blen)
+		return 0;
+
+	if ((location = strstr(buf, "\nLocation:")) == NULL)
+		return 0;
+	location += 10;
+	if ((size_t)(location - buf) >= blen)
+		return 0;
+	if ((nl = strchr(location, '\r')) == NULL)
+		return 0;
+
+	if ((size_t)(nl - buf) >= blen)
+		return 0;
+
+	map<string, string>::iterator i = location_map.begin();
+	for (; i != location_map.end(); ++i) {
+		if (strncmp(i->first.c_str(), location, i->first.size()) == 0)
+			break;
+	}
+
+	if (i == location_map.end())
+		return 0;
+
+	string hdr = string(buf, blen);
+	string new_loc = rproxy_config::location;
+	new_loc += i->second;
+
+	hdr.replace(location - buf, i->first.size(), new_loc);
+
+	if (hdr.size() >= sizeof(fd2state[cur_peer]->buf))
+		return 0;
+	memcpy(buf, hdr.c_str(), hdr.size());
+	fd2state[cur_peer]->blen = hdr.size();
+	return 0;
+}
+
+
 // return -1 on error, 0 if no complete header yet,
 // socket fd otherwise
-int rproxy::mangle_request_header(int sock)
+int rproxy::mangle_request_header()
 {
 	char buf[2048], *ptr = NULL, *end_ptr = NULL, *path_begin = NULL,
 	     *path_end = NULL, *host_begin = NULL, *host_end = NULL;
@@ -359,7 +414,7 @@ int rproxy::mangle_request_header(int sock)
 
 	memset(buf, 0, sizeof(buf));
 	errno = 0;
-	if ((r = recv(sock, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
+	if ((r = recv(cur_peer, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
 		if (errno == EAGAIN)
 			return 0;
 		return -1;
@@ -380,14 +435,14 @@ int rproxy::mangle_request_header(int sock)
 	size_t hlen = ptr - buf + 4;
 	end_ptr = buf + hlen;
 
-	if (read(sock, buf, hlen) != (ssize_t)hlen) {
+	if (read(cur_peer, buf, hlen) != (ssize_t)hlen) {
 		send_error(HTTP_ERROR_500);
 		return -1;
 	}
 	buf[hlen] = 0;
 
 	if (strncasecmp(buf, "GET", 3) != 0 && strncasecmp(buf, "POST", 4) != 0 &&
-	    strncasecmp(buf, "HEAD", 4) != 0 && strncasecmp(buf, "OPTIONS", 7) != 0) {
+	    strncasecmp(buf, "HEAD", 4) != 0 && strncasecmp(buf, "PUT", 3) != 0) {
 		send_error(HTTP_ERROR_405);
 		return -1;
 	}
@@ -406,7 +461,7 @@ int rproxy::mangle_request_header(int sock)
 		return -1;
 	}
 
-	const string &from_ip = fd2state[sock]->from_ip;
+	const string &from_ip = fd2state[cur_peer]->from_ip;
 
 	path_begin = ptr;
 	if ((path_end = strchr(ptr, '?')) == NULL) {
@@ -423,18 +478,22 @@ int rproxy::mangle_request_header(int sock)
 		return -1;
 	}
 
-	fd2state[sock]->req_len = 0;
+	fd2state[cur_peer]->req_len = 0;
 	if ((ptr = strcasestr(buf, "\nContent-Length:"))) {
 		if (ptr + 21 >= end_ptr) {
 			send_error(HTTP_ERROR_400);
 			return -1;
 		}
-		fd2state[sock]->req_len = strtoul(ptr, NULL, 10);
-		if (fd2state[sock]->req_len > 0x10000000) {
+		fd2state[cur_peer]->req_len = strtoul(ptr, NULL, 10);
+		if (fd2state[cur_peer]->req_len > 0x10000000) {
 			send_error(HTTP_ERROR_414);
 			return -1;
 		}
+	} else if (strcasestr(buf, "\nTransfer-Encoding:")) {
+		send_error(HTTP_ERROR_411);
+		return -1;
 	}
+
 	// smash any existing X-Forward entries
 	while ((ptr = strcasestr(buf, "\nX-Forwarded-For"))) {
 		*ptr = 'Y';
@@ -484,11 +543,11 @@ int rproxy::mangle_request_header(int sock)
 
 	// Is it the same path as in a possible earlier request?
 	// Then we dont need to open a new connection
-	if (match->first == fd2state[sock]->opath && fd2state[sock]->peer_fd > 0) {
+	if (match->first == fd2state[cur_peer]->opath && fd2state[cur_peer]->peer_fd > 0) {
 		same_conn = 1;
-		b = fd2state[sock]->node;
+		b = fd2state[cur_peer]->node;
 	} else {
-		// Already decided about a proxy for this IP/path combination?
+		// Already decided about a node for this IP/path combination?
 		map<pair<string, string>, struct backend>::iterator j =
 			client_map.find(make_pair<string, string>(from_ip, match->first));
 
@@ -538,19 +597,19 @@ int rproxy::mangle_request_header(int sock)
 	xfwd += "\r\n\r\n";
 	new_hdr.replace(new_hdr.size() - 2, 2, xfwd);
 
-	if (new_hdr.size() >= sizeof(fd2state[sock]->buf)) {
+	if (new_hdr.size() >= sizeof(fd2state[cur_peer]->buf)) {
 		send_error(HTTP_ERROR_414);
 		return -1;
 	}
 
-	memcpy(fd2state[sock]->buf, new_hdr.c_str(), new_hdr.size());
-	fd2state[sock]->blen = new_hdr.size();
+	memcpy(fd2state[cur_peer]->buf, new_hdr.c_str(), new_hdr.size());
+	fd2state[cur_peer]->blen = new_hdr.size();
 
 	if (same_conn)
-		return fd2state[sock]->peer_fd;
+		return fd2state[cur_peer]->peer_fd;
 
-	fd2state[sock]->opath = match->first;
-	fd2state[sock]->node = b;
+	fd2state[cur_peer]->opath = match->first;
+	fd2state[cur_peer]->node = b;
 	return tcp_connect_nb(b.ai, 0);
 }
 
@@ -603,7 +662,7 @@ int rproxy::send_error(http_error_code_t e)
 	http_header += gmt_date;
 
 	if (e == HTTP_ERROR_405)
-		http_header += "\r\nAllow: OPTIONS, GET, HEAD, POST";
+		http_header += "\r\nAllow: GET, HEAD, POST, PUT";
 
 	http_header += "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 

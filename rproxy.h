@@ -94,7 +94,9 @@ class rproxy : public lonely<rproxy_state> {
 private:
 	std::map<std::pair<std::string, std::string>, struct rproxy_config::backend> client_map;
 
-	int mangle_request_header(int);
+	int mangle_request_header();
+
+	int mangle_server_reply();
 
 	int send_error(http_error_code_t);
 

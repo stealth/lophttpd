@@ -73,9 +73,9 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 
 	if (typeflag & FTW_D) {
 		string html = "<html><head>\n";
-		if (Config::base.size() > 0) {
+		if (httpd_config::base.size() > 0) {
 			html += "<base href=\"";
-			html += Config::base;
+			html += httpd_config::base;
 			html += "\">\n";
 		}
 		html += "<title>Index of ";
@@ -150,7 +150,7 @@ void generate_index(const string &path)
 		html += "</table></body></html>";
 
 		// if running multicore, only master needs to create files
-		if (Config::master && html.size() > index_max_size) {
+		if (httpd_config::master && html.size() > index_max_size) {
 			string path = i->first;
 			path += "/index.html";
 			int flags = O_RDWR|O_CREAT;
@@ -168,12 +168,12 @@ void generate_index(const string &path)
 
 			// own to user, so re-generation of index files
 			// can really happen
-			fchown(fd, Config::user_uid, Config::user_gid);
+			fchown(fd, httpd_config::user_uid, httpd_config::user_gid);
 			close(fd);
 
 			// No iterator invalidation for associative containers
 			dir2index.erase(i);
-		} else if (!Config::master && html.size() > index_max_size)
+		} else if (!httpd_config::master && html.size() > index_max_size)
 			dir2index.erase(i);
 	}
 }

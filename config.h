@@ -9,7 +9,7 @@
 #include <netdb.h>
 #include <stdint.h>
 
-namespace Config
+namespace httpd_config
 {
 	extern std::string root, base;
 	extern bool gen_index, virtual_hosts, is_chrooted;
@@ -32,7 +32,8 @@ struct backend {
 
 
 extern std::map<std::string, std::list<struct backend> > url_map;
-extern std::string user, root, logfile, host, port;
+extern std::map<std::string, std::string> location_map;
+extern std::string user, root, logfile, host, port, location;
 
 int parse(const std::string &);
 

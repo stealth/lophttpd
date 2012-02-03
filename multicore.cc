@@ -106,7 +106,7 @@ int setup_multicore(int n)
 			return -1;
 		}
 		my_core = i;
-		Config::master = 0;
+		httpd_config::master = 0;
 		break;
 	}
 
