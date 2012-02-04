@@ -38,6 +38,8 @@
 #include <new>
 #include <map>
 #include <arpa/inet.h>
+#include <time.h>
+#include <sys/time.h>
 #include "socket.h"
 #include "lonely.h"
 #include "config.h"
@@ -56,6 +58,8 @@ int rproxy::loop()
 	int i = 0, wn = 0, r = 0, afd = -1, peer_fd = -1;
 	char from[64];
 	size_t n = 0;
+	struct tm tm;
+	struct timeval tv;
 	sockaddr_in sin;
 	socklen_t slen = sizeof(sin);
 
@@ -63,7 +67,14 @@ int rproxy::loop()
 		if (poll(pfds, max_fd + 1, 1000) < 0)
 			continue;
 
-		cur_time = time(NULL);
+		memset(&tv, 0, sizeof(tv));
+		memset(&tm, 0, sizeof(tm));
+		gettimeofday(&tv, NULL);
+		cur_time = tv.tv_sec;
+		localtime_r(&cur_time, &tm);
+		strftime(local_date, sizeof(local_date), "%a, %d %b %Y %H:%M:%S GMT%z", &tm);
+		gmtime_r(&cur_time, &tm);
+		strftime(gmt_date, sizeof(gmt_date), "%a, %d %b %Y %H:%M:%S GMT", &tm);
 
 		// assert: pfds[i].fd == i
 		for (i = first_fd; i <= max_fd; ++i) {
@@ -475,6 +486,9 @@ int rproxy::mangle_request_header()
 			}
 		}
 	}
+
+	log(string(buf, path_end - buf));
+
 	string path = string(path_begin, path_end - path_begin);
 	if (path.size() < 1) {
 		send_error(HTTP_ERROR_400);

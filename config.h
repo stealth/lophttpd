@@ -33,7 +33,7 @@ struct backend {
 
 extern std::map<std::string, std::list<struct backend> > url_map;
 extern std::map<std::string, std::string> location_map;
-extern std::string user, root, logfile, host, port, location;
+extern std::string user, root, logfile, host, port, location, logprovider;
 
 int parse(const std::string &);
 

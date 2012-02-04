@@ -34,7 +34,9 @@ string err = "";
 map<string, list<struct backend> > url_map;
 map<string, string> location_map;
 string user = "wwwrun", root = "/var/run/empty",
-       logfile = "/var/log/frontend", host = "0.0.0.0", port = "80", location = "";
+       logfile = "/var/log/frontend", host = "0.0.0.0", port = "80", location = "",
+       logprovider = "file";
+
 
 int parse(const string &cfile)
 {
@@ -135,6 +137,12 @@ int parse(const string &cfile)
 				++ptr;
 			strtok(ptr, " \t\n#");
 			port = ptr;
+		} else if (strncmp(ptr, "logprovider", 11) == 0) {
+			ptr += 11;
+			while (*ptr == ' ' || *ptr == '\t')
+				++ptr;
+			strtok(ptr, " \t\n#");
+			logprovider = ptr;
 		}
 	}
 

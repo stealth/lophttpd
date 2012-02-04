@@ -110,12 +110,12 @@ int main(int argc, char **argv)
 	nice(-20);
 	close_fds();
 
-	/* Every core has its own logfile to avoid locking
-	if (httpd->open_log(Config::logfile, Config::log_provider, NS_Misc::my_core) < 0) {
-		cerr<<"Opening logfile: "<<httpd->why()<<endl;
+	proxy = new (nothrow) rproxy();
+
+	if (proxy->open_log(rproxy_config::logfile, rproxy_config::logprovider, 0) < 0) {
+		cerr<<"Opening logfile: "<<proxy->why()<<endl;
 		return -1;
 	}
-*/
 
 	struct passwd *pw = getpwnam(rproxy_config::user.c_str());
 	if (!pw) {
@@ -171,14 +171,15 @@ int main(int argc, char **argv)
 
 	setsid();
 
-	proxy = new (nothrow) rproxy();
-
 	if (proxy->init(rproxy_config::host, rproxy_config::port, AF_INET) < 0) {
+		proxy->log(proxy->why());
 		exit(-1);
 	}
 
-	for (;;)
-		proxy->loop();
+	for (;;) {
+		if (proxy->loop() < 0)
+			proxy->log(proxy->why());
+	}
 
 	delete proxy;
 	return 0;

@@ -433,7 +433,8 @@ template<typename state_engine>
 const uint8_t lonely<state_engine>::timeout_alive = 30;
 
 
-int lonely_http::open_log(const string &logfile, const string &method, int core = 0)
+template<typename state_engine>
+int lonely<state_engine>::open_log(const string &logfile, const string &method, int core = 0)
 {
 	logger = new (nothrow) log_provider;
 	if (!logger) {
@@ -562,7 +563,8 @@ int lonely_http::transfer()
 }
 
 
-void lonely_http::log(const string &msg)
+template<typename state_engine>
+void lonely<state_engine>::log(const string &msg)
 {
 	if (!logger)
 		return;
@@ -579,6 +581,9 @@ void lonely_http::log(const string &msg)
 	prefix += dst;
 	prefix += ": ";
 	prefix += msg;
+	if (msg.c_str()[msg.size() - 1] != '\n')
+		prefix += "\n";
+
 	logger->log(prefix);
 }
 

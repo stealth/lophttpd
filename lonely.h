@@ -99,6 +99,7 @@ protected:
 	int first_fd, max_fd;
 	int cur_peer;
 	int af;
+	log_provider *logger;
 
 	time_t cur_time;
 
@@ -117,11 +118,15 @@ protected:
 
 public:
 	lonely()
-	 : first_fd(0), max_fd(0), cur_peer(-1), cur_time(0), err(""), fd2state(NULL) {};
+	 : first_fd(0), max_fd(0), cur_peer(-1), logger(NULL), cur_time(0), err(""), fd2state(NULL) {};
 
-	virtual ~lonely() { delete [] pfds; };
+	virtual ~lonely() { delete [] pfds; delete logger; };
 
 	int init(const std::string &, const std::string &, int a = AF_INET);
+
+	int open_log(const std::string &, const std::string &, int core);
+
+	void log(const std::string &);
 
 	virtual int loop() = 0;
 
@@ -172,7 +177,7 @@ private:
 	size_t cur_end_range;
 	bool cur_range_requested;
 	http_request_t cur_request;
-	log_provider *logger;
+
 	size_t mss;
 
 
@@ -207,8 +212,6 @@ private:
 
 	int send_error(http_error_code_t);
 
-	void log(const std::string &);
-
 	int stat();
 
 	int open();
@@ -223,13 +226,11 @@ public:
 	lonely_http(size_t s = 1024)
 	        : cur_start_range(0), cur_end_range(0),
 		  cur_range_requested(0), cur_request(HTTP_REQUEST_NONE),
-	          logger(NULL), mss(s), vhosts(0) {};
+	          mss(s), vhosts(0) {};
 
-	virtual ~lonely_http() { delete logger;};
+	virtual ~lonely_http() {};
 
 	int send_genindex();
-
-	int open_log(const std::string &, const std::string &, int core);
 
 	void clear_cache();
 

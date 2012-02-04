@@ -1,5 +1,5 @@
-lonely & poor HTTPD
-===================
+lots of performance httpd
+=========================
 
 lophttpd was written to demonstrate (to myself) that it is possible
 to have a webserver running in a single thread and handling multiple
@@ -15,7 +15,7 @@ Features:
 + runs as unprived user in a chroot
 + does not require syslogd
 + only handles static content (e.g. no CGI scripts etc)
-+ runs in a single process (lonely)
++ runs in a single process
 + integrated auto indexing support
 + integrated vhost support
 
@@ -59,11 +59,6 @@ e.g. you use autoindexing and copy new files to webroot or
 delete files from there, you need to tell lophttpd by sending
 it a SIGUSR1 signal. It will drop its open file caches and
 generates new indexes.
-
-lophttpd (remember the "poor") only implements a (small) subset of
-HTTP 1.1 RFC. The only reason for it to exist was the fun to write
-it, the challenge to do it in a single process as well as the challenge
-to have it (if possible) faster than any other httpd.
 
 If lhttpd experiances that the generated indexes exceed a certain limit,
 (default 10,000 bytes per dir) it writes the appropriate index.html to disk
