@@ -25,7 +25,11 @@ to that of the user given via "-u". It runs on port "-p".
 If you add "-i" to the commandline, it generates an index file
 (in memory) for the web-root recursively. The user specified via -u
 must have the permissions to walk the webroot, otherwise
-you will get wrong results.
+you will get wrong results. If you use "-i", you probably want
+to copy the icons/ directory to your webroot, to have a pretty
+output. The icons are not by me, I grabbed them from some distro
+and they seem to be public domain.
+
 "-H" enables vhosts.
 
 For every vhost you need to create a subdir of name
