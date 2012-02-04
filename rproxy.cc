@@ -372,6 +372,8 @@ int rproxy::mangle_server_reply()
 	if ((location = strstr(buf, "\nLocation:")) == NULL)
 		return 0;
 	location += 10;
+	while (*location == ' ' && location < hdr_end)
+		++location;
 	if ((size_t)(location - buf) >= blen)
 		return 0;
 	if ((nl = strchr(location, '\r')) == NULL)
@@ -392,6 +394,7 @@ int rproxy::mangle_server_reply()
 	string hdr = string(buf, blen);
 	string new_loc = rproxy_config::location;
 	new_loc += i->second;
+	new_loc += "/";
 
 	hdr.replace(location - buf, i->first.size(), new_loc);
 
@@ -640,7 +643,7 @@ int rproxy::de_escape_path(string &p)
 			c += (10 + c2 - 'A');
 		else
 			c += (c2 - '0');
-		if (c == '\r' || c == 0 || c == '\n')
+		if (c == '\r' || c == 0 || c == '\n' || c == ' ')
 			return -1;
 		tmp.push_back(c);
 		p.replace(pos, 3, tmp, 0, 1);
