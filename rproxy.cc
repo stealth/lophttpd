@@ -270,7 +270,6 @@ int rproxy::loop()
 				if (!fd2state[fd2state[i]->peer_fd] ||
 				    fd2state[fd2state[i]->peer_fd]->state == STATE_CONNECTING) {
 					pfds[i].revents = 0;
-log("foo");
 					continue;
 				}
 
