@@ -245,6 +245,8 @@ int rproxy::loop()
 					// only POLLIN, since we just fetched request and need
 					// to forward it first
 					pfds[i].events = POLLIN;
+					if (fd2state[peer_fd]->blen > 0)
+						pfds[i].events |= POLLOUT;
 
 					if (peer_fd > max_fd)
 						max_fd = peer_fd;

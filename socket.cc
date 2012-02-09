@@ -182,12 +182,14 @@ int tcp_connect_nb(const struct addrinfo &ai, uint16_t local_port)
 	int one = 1;
 	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one ,sizeof(one));
 
-	int f;
+	int f = O_RDWR;
+#ifndef GETFL_OPTIMIZATION
 	if ((f = fcntl(sock, F_GETFL, 0)) < 0) {
 		error = "NS_Socket::tcp_connect_nb::fcntl:";
 		error += strerror(errno);
 		return -1;
 	}
+#endif
 	if (fcntl(sock, F_SETFL, f|O_NONBLOCK) < 0) {
 		error = "NS_Socket::tcp_connect_nb::fcntl:";
 		error += strerror(errno);
