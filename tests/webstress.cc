@@ -1,4 +1,4 @@
-/* webstress webserver download bandwidht tesing tool
+/* webstress webserver download bandwidth tesing tool
  * (C) 2011 Sebastian Krahmer
  */
 #include <iostream>
@@ -360,8 +360,10 @@ int webstress::loop()
 int main(int argc, char **argv)
 {
 
-	if (argc < 4)
+	if (argc < 4) {
+		cerr<<"Usage: ws <host> <port> <path>\n";
 		return 1;
+	}
 
 	webstress ws(argv[1], argv[2], argv[3], 0);
 
