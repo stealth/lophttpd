@@ -215,10 +215,6 @@ int finish_connecting(int fd)
 		error += strerror(errno);
 		return -1;
 	}
-	int f = 0;
-	f = fcntl(fd, F_GETFL, 0);
-	fcntl(fd, F_SETFL, f & ~O_NONBLOCK);
-
 	return nodelay(fd);
 }
 
@@ -251,5 +247,6 @@ int writen(int fd, const void *buf, size_t len)
 	}
 	return o;
 }
+
 }; // namespace
 

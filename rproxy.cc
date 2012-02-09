@@ -330,6 +330,8 @@ int rproxy::loop()
 					}
 					r = read(i, fd2state[i]->buf, n);
 					if (r == 0) {
+						// no need to flush data here, as we won't be here
+						// with fd2state[i]->blen > 0
 						shutdown(fd2state[i]->peer_fd);
 						shutdown(i);
 						continue;
