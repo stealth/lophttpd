@@ -50,7 +50,7 @@ using namespace rproxy_config;
 using namespace NS_Socket;
 using namespace std;
 
-const uint8_t rproxy::timeout_header = 5;
+const uint8_t rproxy::timeout_header = 3;
 
 
 int rproxy::loop()
@@ -85,9 +85,16 @@ int rproxy::loop()
 				continue;
 
 			// timeout hanging connections (with pending data) but not accepting cur_peeret
-			if (cur_time - fd2state[i]->last_t >= 20 &&
+			if (cur_time - fd2state[i]->alive_time >= timeout_alive &&
 			    fd2state[i]->state != STATE_ACCEPTING &&
 			    (fd2state[i]->blen > 0 || fd2state[i]->state == STATE_DECIDING)) {
+				cleanup(fd2state[i]->peer_fd);
+				cleanup(i);
+				continue;
+			}
+
+			if (fd2state[i]->state == STATE_CLOSING &&
+				cur_time - fd2state[i]->alive_time > timeout_closing) {
 				cleanup(fd2state[i]->peer_fd);
 				cleanup(i);
 				continue;
@@ -115,7 +122,7 @@ int rproxy::loop()
 			if (fd2state[i]->state == STATE_ACCEPTING) {
 				pfds[i].revents = 0;
 				for (;;) {
-#ifdef LINUX26
+#ifdef linux
 					afd = accept4(i, (struct sockaddr *)&sin, &slen, SOCK_NONBLOCK);
 #else
 					afd = accept(i, (struct sockaddr *)&sin, &slen);
@@ -127,7 +134,7 @@ int rproxy::loop()
 					pfds[afd].events = POLLIN;
 					pfds[afd].revents = 0;
 
-#ifndef LINUX26
+#ifndef linux
 					if (fcntl(afd, F_SETFL, O_RDWR|O_NONBLOCK) < 0) {
 						cleanup(afd);
 						err = "rproxy::loop::fcntl:";
@@ -152,7 +159,7 @@ int rproxy::loop()
 					fd2state[afd]->from_ip = from;
 					fd2state[afd]->fd = afd;
 					fd2state[afd]->state = STATE_DECIDING;
-					fd2state[afd]->last_t = cur_time;
+					fd2state[afd]->alive_time = cur_time;
 
 					pfds[i].events = POLLOUT|POLLIN;
 
@@ -216,7 +223,7 @@ int rproxy::loop()
 					}
 
 					fd2state[i]->state = STATE_CONNECTED;
-					fd2state[i]->last_t = cur_time;
+					fd2state[i]->alive_time = cur_time;
 					fd2state[i]->type = HTTP_CLIENT;
 
 					if (!fd2state[peer_fd]) {
@@ -236,7 +243,7 @@ int rproxy::loop()
 						fd2state[peer_fd]->type = HTTP_SERVER;
 					}
 
-					fd2state[peer_fd]->last_t = cur_time;
+					fd2state[peer_fd]->alive_time = cur_time;
 
 					pfds[peer_fd].fd = peer_fd;
 					pfds[peer_fd].events = POLLIN|POLLOUT;
@@ -260,7 +267,7 @@ int rproxy::loop()
 					continue;
 				}
 				fd2state[i]->state = STATE_CONNECTED;
-				fd2state[i]->last_t = cur_time;
+				fd2state[i]->alive_time = cur_time;
 				pfds[i].fd = i;
 
 				// POLLOUT too, since mangle_request_header() already slurped data
@@ -320,7 +327,7 @@ int rproxy::loop()
 							fd2state[i]->state = STATE_DECIDING;
 							pfds[i].events = POLLIN;
 							pfds[i].revents = 0;
-							fd2state[i]->last_t = cur_time;
+							fd2state[i]->alive_time = cur_time;
 							fd2state[i]->header_time = 0;
 							continue;
 						}
@@ -362,8 +369,8 @@ int rproxy::loop()
 				}
 
 				pfds[i].revents= 0;
-				fd2state[i]->last_t = cur_time;
-				fd2state[fd2state[i]->peer_fd]->last_t = cur_time;
+				fd2state[i]->alive_time = cur_time;
+				fd2state[fd2state[i]->peer_fd]->alive_time = cur_time;
 			} else if (fd2state[i]->state == STATE_CLOSING) {
 				cleanup(i);
 			}

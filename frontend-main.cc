@@ -117,6 +117,11 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	if (proxy->init(rproxy_config::host, rproxy_config::port, AF_INET) < 0) {
+		proxy->log(proxy->why());
+		exit(-1);
+	}
+
 	struct passwd *pw = getpwnam(rproxy_config::user.c_str());
 	if (!pw) {
 		cerr<<"Fatal: Unknown user '"<<rproxy_config::user<<"'. Exiting.\n";
@@ -170,11 +175,6 @@ int main(int argc, char **argv)
 		exit(0);
 
 	setsid();
-
-	if (proxy->init(rproxy_config::host, rproxy_config::port, AF_INET) < 0) {
-		proxy->log(proxy->why());
-		exit(-1);
-	}
 
 	for (;;) {
 		if (proxy->loop() < 0)

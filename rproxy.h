@@ -62,7 +62,7 @@ typedef enum {
 struct rproxy_state {
 	int fd, peer_fd, keep_alive;
 	status_t state;
-	time_t last_t, header_time;
+	time_t alive_time, header_time;
 	off_t offset;
 	struct rproxy_config::backend node;
 	std::string opath, from_ip;
@@ -72,7 +72,7 @@ struct rproxy_state {
 	http_instance_t type;
 
 	rproxy_state()
-	 : fd(-1), peer_fd(-1), keep_alive(0), state(STATE_ERROR), last_t(0), header_time(0),
+	 : fd(-1), peer_fd(-1), keep_alive(0), state(STATE_ERROR), alive_time(0), header_time(0),
 	   opath(""), from_ip(""), blen(0),
 	   req_len(0), type(HTTP_NONE) {};
 
@@ -83,7 +83,7 @@ struct rproxy_state {
 		type = HTTP_NONE;
 		node.host.clear(); node.path.clear(); opath.clear(); from_ip.clear();
 		blen = req_len = 0;
-		last_t = header_time = 0;
+		alive_time = header_time = 0;
 	}
 };
 

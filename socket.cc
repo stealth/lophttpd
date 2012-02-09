@@ -174,14 +174,14 @@ int tcp_connect_nb(const struct addrinfo &ai, uint16_t local_port)
 		return -1;
 	}
 
+	// not needed until FREEBIND
+	//int one = 1;
+	//setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one ,sizeof(one));
 	if (local_port > 0) {
 		if (bind_local(sock, local_port, 0, 1000) < 0)
 			return -1;
 	}
-
-	int one = 1;
-	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one ,sizeof(one));
-
+	
 	int f = O_RDWR;
 #ifndef GETFL_OPTIMIZATION
 	if ((f = fcntl(sock, F_GETFL, 0)) < 0) {
