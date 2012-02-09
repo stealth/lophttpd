@@ -68,14 +68,12 @@ struct http_state {
 	size_t copied, left;
 	dev_t dev;
 	ino_t ino;
-	struct sockaddr_in sin;
-	struct sockaddr_in6 sin6;
-	std::string path;
+	std::string path, from_ip;
 	int ct;
 
 	http_state()
 	 : peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
-	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), ct(0) {};
+	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), from_ip(""), ct(0) {};
 
 	void cleanup()
 	{
@@ -87,7 +85,7 @@ struct http_state {
 		dev = ino = 0;
 		ct = 0;
 		state = STATE_NONE;
-		path.clear();
+		path.clear(); from_ip.clear();
 	}
 };
 

@@ -64,8 +64,6 @@ struct rproxy_state {
 	status_t state;
 	time_t last_t, header_time;
 	off_t offset;
-	struct sockaddr_in sin;
-	struct sockaddr_in6 sin6;
 	struct rproxy_config::backend node;
 	std::string opath, from_ip;
 	char buf[4096];

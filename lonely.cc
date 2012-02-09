@@ -282,6 +282,7 @@ int lonely_http::loop()
 	struct sockaddr *saddr = (struct sockaddr *)&sin;
 	struct tm tm;
 	struct timeval tv;
+	char from[128];
 
 	if (af == AF_INET6) {
 		slen = sizeof(sin6);
@@ -376,8 +377,13 @@ int lonely_http::loop()
 
 					fd2state[afd]->state = STATE_CONNECTED;
 					fd2state[afd]->alive_time = cur_time;
-					fd2state[afd]->sin = sin;
-					fd2state[afd]->sin6 = sin6;
+
+					if (af == AF_INET)
+						inet_ntop(AF_INET, &sin.sin_addr, from, sizeof(from));
+					else
+						inet_ntop(AF_INET6, &sin6.sin6_addr, from, sizeof(from));
+
+					fd2state[afd]->from_ip = from;
 
 					if (afd > max_fd)
 						max_fd = afd;
@@ -571,14 +577,8 @@ void lonely<state_engine>::log(const string &msg)
 
 	string prefix = local_date;
 
-	char dst[128];
-	if (af == AF_INET)
-		inet_ntop(AF_INET, &fd2state[cur_peer]->sin.sin_addr, dst, sizeof(dst));
-	else
-		inet_ntop(AF_INET6, &fd2state[cur_peer]->sin6.sin6_addr, dst, sizeof(dst));
-
 	prefix += ": ";
-	prefix += dst;
+	prefix += fd2state[cur_peer]->from_ip;
 	prefix += ": ";
 	prefix += msg;
 	if (msg.c_str()[msg.size() - 1] != '\n')

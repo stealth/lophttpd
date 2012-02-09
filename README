@@ -14,10 +14,12 @@ Features:
 
 + runs as unprived user in a chroot
 + does not require syslogd
++ supports multiple logproviders ("mmap" is very fast)
 + only handles static content (e.g. no CGI scripts etc)
 + runs in a single process
 + integrated auto indexing support
 + integrated vhost support
++ can operate behind reverse proxy with -B
 
 You should run lophttpd as root. Then it chroots itself to the
 "-R" parameter given on the commandline and drops the privileges
@@ -90,7 +92,9 @@ since glibc is using pthreads under the hood.)
 Since version 0.86 lophttpd supports multicore setups for Linux.
 If run without any -n switch, lophttpd will run one process per core.
 You can turn this off by using "-n 1" or you specify the number
-of cores you want lophttpd to use.
+of cores you want lophttpd to use. In general, "-n 1" is a good idea,
+since even if under heavy load, you rarely need more than one core
+for lophttpd.
 
 Since version 0.88 lophttpd has one logfile per core. If you run on two
 cores you get "logfile.0" and "logfile.1". This way we avoid file locking.
@@ -116,7 +120,7 @@ If you operate lophhtpd behind a proxy, you can use the '-B string'
 argument so it automatically generates <base href="string"> argument
 which should be your proxy URL: http://proxy:port/path/.
 The base string must end with '/' character and the index which lhttpd
-generates is relative to this base.
+generates is relative to this base. -B makes only sense with -i.
 
 If you have ideas and or offer performance/testing environment please
 drop me an email: sebastian.krahmer [at] gmail [dot] com :-)

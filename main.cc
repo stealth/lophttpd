@@ -115,7 +115,7 @@ void sigusr1(int x)
 int main(int argc, char **argv)
 {
 	int c = 0;
-	cout<<"\nlophttpd -- lonely & poor httpd (C) 2008-2012 Sebastian Krahmer\n\n";
+	cout<<"\nlophttpd -- lots of performance httpd (C) 2008-2012 Sebastian Krahmer\n\n";
 
 	if (getuid() != 0) {
 		cerr<<"\a!!! WARNING: !!! Must be called as root in order to chroot() and drop privs properly!\n";

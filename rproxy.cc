@@ -94,8 +94,15 @@ int rproxy::loop()
 			}
 
 			if ((pfds[i].revents & (POLLERR|POLLHUP|POLLNVAL)) != 0) {
-				cleanup(fd2state[i]->peer_fd);
-				cleanup(i);
+				if (fd2state[i]->blen > 0) {
+					writen(fd2state[i]->peer_fd, fd2state[i]->buf, fd2state[i]->blen);
+					fd2state[i]->blen = 0;
+					shutdown(fd2state[i]->peer_fd);
+					shutdown(i);
+				} else {
+					cleanup(fd2state[i]->peer_fd);
+					cleanup(i);
+				}
 				continue;
 			}
 
@@ -146,7 +153,6 @@ int rproxy::loop()
 					fd2state[afd]->fd = afd;
 					fd2state[afd]->state = STATE_DECIDING;
 					fd2state[afd]->last_t = cur_time;
-					fd2state[afd]->sin = sin;
 
 					pfds[i].events = POLLOUT|POLLIN;
 
@@ -236,7 +242,9 @@ int rproxy::loop()
 					pfds[peer_fd].events = POLLIN|POLLOUT;
 					pfds[peer_fd].revents = 0;
 
-					pfds[i].events = POLLIN|POLLOUT;
+					// only POLLIN, since we just fetched request and need
+					// to forward it first
+					pfds[i].events = POLLIN;
 
 					if (peer_fd > max_fd)
 						max_fd = peer_fd;
@@ -262,6 +270,7 @@ int rproxy::loop()
 				if (!fd2state[fd2state[i]->peer_fd] ||
 				    fd2state[fd2state[i]->peer_fd]->state == STATE_CONNECTING) {
 					pfds[i].revents = 0;
+log("foo");
 					continue;
 				}
 
