@@ -37,6 +37,8 @@
 #include <iostream>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <sys/mount.h>
 #include <fcntl.h>
 #include "config.h"
 #include "misc.h"
@@ -119,14 +121,23 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += ctime(&st->st_mtime);
 		html += "</th><th>";
 		char sbuf[128];
-		if (st->st_size > 1024*1024*1024)
-			sprintf(sbuf, "%.2f GB", ((double)st->st_size)/(1024*1024*1024));
-		else if (st->st_size > 1024*1024)
-			sprintf(sbuf, "%.2f MB", ((double)st->st_size)/(1024*1024));
-		else if (st->st_size > 1024)
-			sprintf(sbuf, "%.2f KB", ((double)st->st_size)/1024);
+		// st is const
+		off_t size = (off_t)st->st_size;
+		if (S_ISBLK(st->st_mode)) {
+			int fd = open(fpath, O_RDONLY);
+			if (fd > 0) {
+				ioctl(fd, BLKGETSIZE64, &size);
+				close(fd);
+			}
+		}
+		if (size > 1024*1024*1024)
+			sprintf(sbuf, "%.2f GB", ((double)size)/(1024*1024*1024));
+		else if (size > 1024*1024)
+			sprintf(sbuf, "%.2f MB", ((double)size)/(1024*1024));
+		else if (size > 1024)
+			sprintf(sbuf, "%.2f KB", ((double)size)/1024);
 		else
-			sprintf(sbuf, "%zd B", st->st_size);
+			sprintf(sbuf, "%zd B", size);
 
 		html += sbuf;
 		html += "</th></tr>";
