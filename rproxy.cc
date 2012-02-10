@@ -84,7 +84,8 @@ int rproxy::loop()
 			if (!fd2state[i])
 				continue;
 
-			// timeout hanging connections (with pending data) but not accepting cur_peeret
+			// timeout hanging connections (with pending data) but not accepting
+			// socket
 			if (cur_time - fd2state[i]->alive_time >= timeout_alive &&
 			    fd2state[i]->state != STATE_ACCEPTING &&
 			    (fd2state[i]->blen > 0 || fd2state[i]->state == STATE_DECIDING)) {
@@ -372,6 +373,7 @@ int rproxy::loop()
 				fd2state[i]->alive_time = cur_time;
 				fd2state[fd2state[i]->peer_fd]->alive_time = cur_time;
 			} else if (fd2state[i]->state == STATE_CLOSING) {
+				cleanup(fd2state[i]->peer_fd);
 				cleanup(i);
 			}
 
