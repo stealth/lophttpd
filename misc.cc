@@ -92,8 +92,16 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += "</h1>";
 		html += "<table border=1><thead><tr><th></th><th>Name</th><th>Last modified</th><th>Size</th></tr>";
 		html += "<th><img src=\"icons/back.png\" alt=\"[DIR]\"></th>";
-		html += "<th><a href=\".";
-		html += parent;
+		html += "<th><a href=\"";
+
+		// If / is the parent, we need to use the base URL, since
+		// otherwise it would be "/", which is not relative and wont
+		// work with reverse proxy + <base> tag, which only works for
+		// relative URLs
+		if (strcmp(parent, "/") == 0)
+			html += httpd_config::base;
+		else
+			html += parent + 1;
 		html += "\">Parent Directory</a></th></tr></thead>";
 
 		if (dir2index.find(fpath) == dir2index.end())
@@ -105,8 +113,8 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 			return 0;
 
 		html += "<tr><th><img src=\"icons/folder.png\" alt=\"[DIR]\"></th>";
-		html += "<th><a href=\".";
-		html += fpath;
+		html += "<th><a href=\"";
+		html += fpath + 1;
 		html += "\">";
 		html += basename;
 		html += "</th><th>";
@@ -117,8 +125,8 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 	} else {
 		string &html = dir2index[parent];
 		html += "<tr><th><img src=\"icons/file.gif\" alt=\"[FILE]\"></th>";
-		html += "<th><a href=\".";
-		html += fpath;
+		html += "<th><a href=\"";
+		html += fpath + 1;
 		html += "\">";
 		html += basename;
 		html += "</th><th>";

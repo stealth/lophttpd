@@ -585,9 +585,13 @@ void lonely<state_engine>::log(const string &msg)
 
 	string prefix = local_date;
 
-	prefix += ": ";
-	prefix += fd2state[cur_peer]->from_ip;
-	prefix += ": ";
+	if (fd2state[cur_peer]) {
+		prefix += ": ";
+		prefix += fd2state[cur_peer]->from_ip;
+		prefix += ": ";
+	} else
+		prefix += ": <no client context>: ";
+
 	prefix += msg;
 	if (msg.c_str()[msg.size() - 1] != '\n')
 		prefix += "\n";
