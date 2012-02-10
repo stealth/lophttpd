@@ -145,7 +145,7 @@ void generate_index(const string &path)
 	ftw(path.c_str(), ftw_helper, 1);
 #endif
 
-	for (i = dir2index.begin(); i != dir2index.end(); ++i) {
+	for (i = dir2index.begin(); i != dir2index.end();) {
 		string &html = i->second;
 		html += "</table><p id=\"bottom\"><a href=\"http://github.com/stealth/lophttpd\">lophttpd powered</a></p></body></html>";
 
@@ -162,8 +162,10 @@ void generate_index(const string &path)
 			else
 				flags |= O_TRUNC;
 			int fd = open(path.c_str(), flags, 0644);
-			if (fd < 0)
+			if (fd < 0) {
+				++i;
 				continue;
+			}
 			write(fd, i->second.c_str(), i->second.size());
 
 			// own to user, so re-generation of index files
@@ -173,8 +175,14 @@ void generate_index(const string &path)
 
 			// No iterator invalidation for associative containers
 			dir2index.erase(i);
-		} else if (!httpd_config::master && html.size() > index_max_size)
+			i = dir2index.begin();
+			continue;
+		} else if (!httpd_config::master && html.size() > index_max_size) {
 			dir2index.erase(i);
+			i = dir2index.begin();
+			continue;
+		}
+		++i;
 	}
 }
 

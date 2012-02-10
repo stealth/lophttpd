@@ -46,6 +46,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <sys/ioctl.h>
+#include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/resource.h>
 #include <netinet/in.h>
@@ -483,6 +485,13 @@ int lonely_http::send_http_header()
 
 int lonely_http::send_genindex()
 {
+	const string &p = fd2state[cur_peer]->path;
+	string idx = "";
+
+	map<string, string>::iterator i = NS_Misc::dir2index.find(p);
+	if (i != NS_Misc::dir2index.end())
+		idx = i->second;
+
 	string http_header = "HTTP/1.1 200 OK\r\n"
 	                     "Server: lophttpd\r\n"
 	                     "Date: ";
@@ -490,13 +499,12 @@ int lonely_http::send_genindex()
 	http_header += "\r\nContent-Length: %zu\r\n"
                        "Content-Type: text/html\r\n\r\n%s";
 
-	const string &p = fd2state[cur_peer]->path;
-	size_t l = http_header.size() + 128 + NS_Misc::dir2index[p].size();
+
+	size_t l = http_header.size() + 128 + idx.size();
 	char *h_buf = new (nothrow) char[l];
 	if (!h_buf)
-		return 0;
-	snprintf(h_buf, l, http_header.c_str(), NS_Misc::dir2index[p].size(),
-	         NS_Misc::dir2index[p].c_str());
+		return -1;
+	snprintf(h_buf, l, http_header.c_str(), idx.size(), idx.c_str());
 	int r = writen(cur_peer, h_buf, strlen(h_buf));
 	delete [] h_buf;
 
@@ -616,11 +624,8 @@ int lonely_http::HEAD()
 				map<string, string>::iterator i = NS_Misc::dir2index.find(o_path);
 				if (i == NS_Misc::dir2index.end())
 					cl = 0;
-				else {
+				else
 					cl = i->second.size();
-					// override content-type to text/html as we know it know
-					fd2state[cur_peer]->ct = 1;
-				}
 
 				// Not needed, since request is finished here
 				//fd2state[cur_peer]->path = o_path;
@@ -739,8 +744,6 @@ int lonely_http::stat()
 
 	map<string, pair<struct stat, int> >::iterator it;
 
-	fd2state[cur_peer]->ct = 0;
-
 	if (!cacheit) {
 		r = ::stat(p.c_str(), &cur_stat);
 	} else {
@@ -754,9 +757,9 @@ int lonely_http::stat()
 			if (r < 0)
 				return r;
 
-			// text/html if in generated index
-			if (S_ISDIR(cur_stat.st_mode) &&
-			    NS_Misc::dir2index.find(p) != NS_Misc::dir2index.end())
+			// always text/html if dir, if theres no autoindexing,
+			// the content-len will be 0
+			if (S_ISDIR(cur_stat.st_mode))
 				ct = 1;
 			else {
 				// Not cached, so lets also find out about the content-type
@@ -774,6 +777,22 @@ int lonely_http::stat()
 	}
 
 	if (r == 0) {
+		if (!S_ISDIR(cur_stat.st_mode) && !S_ISREG(cur_stat.st_mode) &&
+		    !S_ISBLK(cur_stat.st_mode))
+			return -1;
+		// special case for blockdevices; if not already fetched size,
+		// put it into cur_stat
+		if (cur_stat.st_size == 0 && S_ISBLK(cur_stat.st_mode)) {
+			int fd = ::open(p.c_str(), O_RDONLY);
+			if (fd < 0)
+				return -1;
+			if (ioctl(fd, BLKGETSIZE64, &cur_stat.st_size) < 0) {
+				close(fd);
+				return -1;
+			}
+			close(fd);
+			ct = 0;
+		}
 		fd2state[cur_peer]->dev = cur_stat.st_dev;
 		fd2state[cur_peer]->ino = cur_stat.st_ino;
 		fd2state[cur_peer]->ct = ct;
@@ -867,7 +886,7 @@ int lonely_http::GETPOST()
 		return send_error(HTTP_ERROR_400);
 
 	int r = 0;
-	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode))) {
+	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode) || S_ISBLK(cur_stat.st_mode))) {
 		if (cur_end_range == 0)
 			cur_end_range = cur_stat.st_size;
 		if (cur_start_range < 0 ||
