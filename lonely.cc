@@ -778,7 +778,7 @@ int lonely_http::stat()
 
 	if (r == 0) {
 		if (!S_ISDIR(cur_stat.st_mode) && !S_ISREG(cur_stat.st_mode) &&
-		    !S_ISBLK(cur_stat.st_mode))
+		    !S_ISBLK(cur_stat.st_mode) && !S_ISLNK(cur_stat.st_mode))
 			return -1;
 		// special case for blockdevices; if not already fetched size,
 		// put it into cur_stat
@@ -886,7 +886,8 @@ int lonely_http::GETPOST()
 		return send_error(HTTP_ERROR_400);
 
 	int r = 0;
-	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode) || S_ISBLK(cur_stat.st_mode))) {
+	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode) || S_ISBLK(cur_stat.st_mode) ||
+	    S_ISLNK(cur_stat.st_mode))) {
 		if (cur_end_range == 0)
 			cur_end_range = cur_stat.st_size;
 		if (cur_start_range < 0 ||

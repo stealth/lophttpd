@@ -13,7 +13,7 @@ using namespace std;
 
 namespace httpd_config
 {
-	string root = "/srv/www/htdocs", base = "";
+	string root = "/srv/www/htdocs", base = "/";
 	bool gen_index = 0, virtual_hosts = 0, is_chrooted = 0;
 	string user = "wwwrun", logfile = "/var/log/lophttpd", log_provider = "file";
 	uid_t user_uid = 99, user_gid = 99;

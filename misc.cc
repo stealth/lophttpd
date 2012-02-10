@@ -64,6 +64,10 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 	if (!basename)
 		return 0;
 
+	if (!S_ISDIR(st->st_mode) && !S_ISREG(st->st_mode) && !S_ISBLK(st->st_mode) &&
+	    !S_ISLNK(st->st_mode))
+		return 0;
+
 	if (basename == pathname) {
 		parent = (char *)"/";
 		++basename;
