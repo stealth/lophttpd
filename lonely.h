@@ -236,5 +236,11 @@ public:
 };
 
 
+#ifdef ANDROID
+int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags);
+#define SOCK_NONBLOCK 04000
+#define BLKGETSIZE64 _IOR(0x12,114,size_t)
+
+#endif
 #endif
 

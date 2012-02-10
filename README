@@ -122,6 +122,11 @@ which should be your proxy URL: http://proxy:port/path/.
 The base string must end with '/' character and the index which lhttpd
 generates is relative to this base. -B makes only sense with -i.
 
+lophttpd also serves block device files. You need to run it as
+root (-u root) or as the user who can open the block dev files. This
+is not really for production use, (keep the security implications in mind
+if running as root) but its sometimes useful on embedded devices.
+
 If you have ideas and or offer performance/testing environment please
 drop me an email: sebastian.krahmer [at] gmail [dot] com :-)
 

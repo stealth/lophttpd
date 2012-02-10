@@ -3,13 +3,17 @@
 
 #include <string>
 #include <sys/types.h>
+#ifndef ANDROID
 #include <aio.h>
+#endif
 
 
 class log_provider {
 private:
 	int log_fd;
+#ifndef ANDROID
 	struct aiocb log_aio;
+#endif
 	void *log_area;
 	off_t log_index, log_size;
 

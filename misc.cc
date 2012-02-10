@@ -33,7 +33,9 @@
 #include <string>
 #include <cstring>
 #include <cstdio>
+#ifndef ANDROID
 #include <ftw.h>
+#endif
 #include <iostream>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -54,6 +56,8 @@ string err = "";
 // if generated indexes exceed this limit, they
 // are written as index.html to disk
 const unsigned int index_max_size = 10000;
+
+#ifndef ANDROID
 
 int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 {
@@ -209,6 +213,13 @@ void generate_index(const string &path)
 	}
 }
 
+#else
+
+void generate_index(const string &path)
+{
+}
+
+#endif
 
 const char *why()
 {

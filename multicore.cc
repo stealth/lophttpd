@@ -7,6 +7,7 @@
 
 
 #ifdef linux
+#ifndef ANDROID
 
 #include <cstdio>
 #include <cstdlib>
@@ -116,6 +117,7 @@ int setup_multicore(int n)
 
 }
 
+#endif
 #else
 
 namespace NS_Misc {
