@@ -39,7 +39,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-namespace NS_Socket {
+namespace ns_socket {
 
 const char *why();
 

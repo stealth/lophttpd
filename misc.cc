@@ -32,21 +32,32 @@
 
 #include <string>
 #include <cstring>
+#include <cstdlib>
 #include <cstdio>
-#ifndef ANDROID
-#include <ftw.h>
-#endif
+#include <time.h>
+#include <unistd.h>
+#include <dirent.h>
 #include <iostream>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
+#include <sys/time.h>
 #include <fcntl.h>
 #include "config.h"
 #include "misc.h"
 
 
-namespace NS_Misc {
+// Android has got not ftw! So we need to write our own
+
+namespace misc {
+
+enum {
+	FTW_D = 1,
+	FTW_F = 2,
+	FTW_L = 4
+};
+
 
 using namespace std;
 
@@ -57,7 +68,6 @@ string err = "";
 // are written as index.html to disk
 const unsigned int index_max_size = 10000;
 
-#ifndef ANDROID
 
 int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 {
@@ -122,10 +132,27 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += "\">";
 		html += basename;
 		html += "</th><th>";
-		html += ctime(&st->st_mtime);
+		html += ctime((const time_t *)&st->st_mtime);
 		html += "</th></tr>";
 
 		dir2index[parent] = html;
+	} else if (typeflag & FTW_L) {
+		char lnk[1024], rlnk[4096];
+		memset(lnk, 0, sizeof(lnk));
+		memset(rlnk, 0, sizeof(rlnk));
+		if (readlink(fpath, lnk, sizeof(lnk)) < 0)
+			return -1;
+		if (!realpath(lnk, rlnk))
+			return -1;
+		string &html = dir2index[parent];
+		html += "<tr><th><img src=\"icons/file.gif\" alt=\"[LINK]\"></th>";
+		html += "<th><a href=\"";
+		html += rlnk + 1;
+		html += "\">";
+		html += basename;
+		html += "</th><th>";
+		html += ctime((const time_t *)&st->st_mtime);
+		html += "</th></tr>";
 	} else {
 		string &html = dir2index[parent];
 		html += "<tr><th><img src=\"icons/file.gif\" alt=\"[FILE]\"></th>";
@@ -134,7 +161,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += "\">";
 		html += basename;
 		html += "</th><th>";
-		html += ctime(&st->st_mtime);
+		html += ctime((const time_t *)&st->st_mtime);
 		html += "</th><th>";
 		char sbuf[128];
 		// st is const
@@ -162,17 +189,68 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 }
 
 
+
+int ftw_once(const char *dir, int (*fn) (const char *fpath, const struct stat *sb, int typeflag), int nopenfd)
+{
+	DIR *dfd = NULL;
+	string pathname = "";
+	struct dirent dent, *res = NULL;
+	struct stat lst;
+
+	if ((dfd = opendir(dir)) == NULL)
+		return -1;
+
+	for (;;) {
+		if (readdir_r(dfd, &dent, &res) < 0)
+			break;
+		if (!res)
+			break;
+		if (strcmp(dent.d_name, ".") == 0 || strcmp(dent.d_name, "..") == 0)
+			continue;
+		pathname = dir;
+		if (pathname[pathname.size() - 1] != '/')
+			pathname += "/";
+		pathname += dent.d_name;
+
+		if (lstat(pathname.c_str(), &lst) < 0)
+			continue;
+		// dont follow symlinks into directories
+		if (S_ISDIR(lst.st_mode)) {
+			fn(pathname.c_str(), &lst, FTW_D);
+			ftw_once(pathname.c_str(), fn, 1);
+		} else if (S_ISLNK(lst.st_mode)) {
+			fn(pathname.c_str(), &lst, FTW_L);
+		} else {
+			fn(pathname.c_str(), &lst, FTW_F);
+		}
+	}
+	closedir(dfd);
+	return 0;
+}
+
+
+// nopenfd is ignored
+int ftw(const char *dir, int (*fn) (const char *fpath, const struct stat *sb, int typeflag), int nopenfd)
+{
+	struct stat st;
+
+	// This function is only to also record the real parent dir
+	// without having it processed inrecursive calls ever and ever
+	if (stat(dir, &st) < 0)
+		return -1;
+	fn(dir, &st, FTW_D);
+
+	return ftw_once(dir, fn, nopenfd);
+}
+
+
 void generate_index(const string &path)
 {
 	map<string, string>::iterator i;
-#ifdef linux
-	ftw(path.c_str(), ftw_helper, 64);
-#else
-// FreeBSD returns error with nfd > OPEN_MAX
-	ftw(path.c_str(), ftw_helper, 1);
-#endif
 
-	for (i = dir2index.begin(); i != dir2index.end();) {
+	ftw(path.c_str(), ftw_helper, 1);
+
+	for (i = dir2index.begin(); i != dir2index.end(); ++i) {
 		string &html = i->second;
 		html += "</table><p id=\"bottom\"><a href=\"http://github.com/stealth/lophttpd\">lophttpd powered</a></p></body></html>";
 
@@ -190,7 +268,6 @@ void generate_index(const string &path)
 				flags |= O_TRUNC;
 			int fd = open(path.c_str(), flags, 0644);
 			if (fd < 0) {
-				++i;
 				continue;
 			}
 			write(fd, i->second.c_str(), i->second.size());
@@ -200,26 +277,14 @@ void generate_index(const string &path)
 			fchown(fd, httpd_config::user_uid, httpd_config::user_gid);
 			close(fd);
 
-			// No iterator invalidation for associative containers
-			dir2index.erase(i);
-			i = dir2index.begin();
-			continue;
+			i->second.clear();
 		} else if (!httpd_config::master && html.size() > index_max_size) {
-			dir2index.erase(i);
-			i = dir2index.begin();
+			i->second.clear();
 			continue;
 		}
-		++i;
 	}
 }
 
-#else
-
-void generate_index(const string &path)
-{
-}
-
-#endif
 
 const char *why()
 {

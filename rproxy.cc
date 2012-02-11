@@ -47,7 +47,7 @@
 
 
 using namespace rproxy_config;
-using namespace NS_Socket;
+using namespace ns_socket;
 using namespace std;
 
 const uint8_t rproxy::timeout_header = 3;
@@ -261,7 +261,7 @@ int rproxy::loop()
 			} else if (fd2state[i]->state == STATE_CONNECTING) {
 				if (finish_connecting(i) < 0) {
 					err = "rproxy::loop::";
-					err += NS_Socket::why();
+					err += ns_socket::why();
 					cleanup(fd2state[i]->peer_fd);
 					cleanup(i);
 					// log

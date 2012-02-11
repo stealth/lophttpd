@@ -1,7 +1,7 @@
 #ifndef __multicore_h__
 #define __multicore_h__
 
-namespace NS_Misc {
+namespace misc {
 
 extern int my_core;
 

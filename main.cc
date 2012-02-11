@@ -102,11 +102,11 @@ void sigusr1(int x)
 		return;
 
 	if (httpd_config::gen_index) {
-		NS_Misc::dir2index.clear();
+		misc::dir2index.clear();
 		if (httpd_config::is_chrooted)
-			NS_Misc::generate_index("/");
+			misc::generate_index("/");
 		else
-			NS_Misc::generate_index(httpd_config::root);
+			misc::generate_index(httpd_config::root);
 	}
 	httpd->clear_cache();
 }
@@ -185,13 +185,13 @@ int main(int argc, char **argv)
 	}
 
 	// Needs to be called before chroot
-	NS_Misc::init_multicore();
-	NS_Misc::setup_multicore(httpd_config::cores);
+	misc::init_multicore();
+	misc::setup_multicore(httpd_config::cores);
 
 	// Every core has its own logfile to avoid locking
-	if (httpd->open_log(httpd_config::logfile, httpd_config::log_provider, NS_Misc::my_core) < 0) {
-		cerr<<"Opening logfile: "<<httpd->why()<<endl;
-		return -1;
+	if (httpd->open_log(httpd_config::logfile, httpd_config::log_provider, misc::my_core) < 0) {
+		cerr<<"ERROR: opening logfile: "<<httpd->why()<<endl;
+		cerr<<"continuing without logging!\n";
 	}
 
 	struct passwd *pw = getpwnam(httpd_config::user.c_str());
@@ -212,9 +212,9 @@ int main(int argc, char **argv)
 
 	if (httpd_config::gen_index) {
 		if (httpd_config::is_chrooted)
-			NS_Misc::generate_index("/");
+			misc::generate_index("/");
 		else
-			NS_Misc::generate_index(httpd_config::root);
+			misc::generate_index(httpd_config::root);
 	}
 
 

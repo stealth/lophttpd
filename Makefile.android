@@ -1,0 +1,45 @@
+ROOT=/S/SOURCES
+NDK=android-ndk-r7
+
+PREFIX=$(ROOT)/$(NDK)/toolchains/arm-linux-androideabi-4.4.3/prebuilt/linux-x86/bin/arm-linux-androideabi-
+SYSROOT=--sysroot=$(ROOT)/$(NDK)/platforms/android-9/arch-arm/
+INC=-I$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/include\
+    -I$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/libs/armeabi/include
+LIB=-Wl,$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/libs/armeabi/libgnustl_static.a
+
+
+CXX=$(PREFIX)c++ $(INC) $(SYSROOT) -Wall -O2 -DGETFL_OPTIMIZATION -DANDROID
+LD=$(PREFIX)c++ $(SYSROOT)
+
+all: lhttpd
+
+clean:
+	rm -f *.o
+
+distclean: clean
+	rm -f lhttpd
+
+lhttpd: lonely.o socket.o main.o misc.o log.o multicore.o config.o
+	$(LD) lonely.o socket.o main.o misc.o log.o multicore.o config.o $(LIB) -static -o lhttpd
+
+multicore.o: multicore.cc multicore.h
+	$(CXX) -c multicore.cc
+
+log.o: log.cc log.h
+	$(CXX) -c log.cc
+
+misc.o: misc.cc misc.h
+	$(CXX) -c misc.cc
+
+main.o: main.cc
+	$(CXX) -c main.cc
+
+socket.o: socket.cc socket.h
+	$(CXX) -c socket.cc
+
+lonely.o: lonely.cc lonely.h
+	$(CXX) -c lonely.cc
+
+config.o: config.cc config.h
+	$(CXX) -c config.cc
+

@@ -65,7 +65,7 @@
 #endif
 
 using namespace std;
-using namespace NS_Socket;
+using namespace ns_socket;
 
 
 struct ext2CT {
@@ -174,7 +174,7 @@ int lonely<state_engine>::init(const string &host, const string &port, int a)
 
 	// bind & listen
 	if (bind_local(sock_fd, host, port, 1, af) < 0) {
-		err = NS_Socket::why();
+		err = ns_socket::why();
 		return -1;
 	}
 
@@ -275,7 +275,7 @@ void lonely<state_engine>::calc_max_fd()
 int lonely_http::loop()
 {
 	int i = 0;
-#ifndef linux
+#if !defined linux || defined ANDROID
 	int flags = O_RDWR;
 #endif
 	struct sockaddr_in sin;
@@ -346,7 +346,7 @@ int lonely_http::loop()
 
 				int afd = 0;
 				for (;;) {
-#ifdef linux
+#if defined linux && !defined ANDROID
 					afd = accept4(i, saddr, &slen, SOCK_NONBLOCK);
 #else
 					afd = accept(i, saddr, &slen);
@@ -359,7 +359,7 @@ int lonely_http::loop()
 					pfds[afd].fd = afd;
 					pfds[afd].events = POLLIN;
 					pfds[afd].revents = 0;
-#ifndef linux
+#if !defined linux || defined ANDROID
 #ifndef GETFL_OPTIMIZATION
 					flags = fcntl(afd, F_GETFL);
 #endif
@@ -488,8 +488,8 @@ int lonely_http::send_genindex()
 	const string &p = fd2state[cur_peer]->path;
 	string idx = "";
 
-	map<string, string>::iterator i = NS_Misc::dir2index.find(p);
-	if (i != NS_Misc::dir2index.end())
+	map<string, string>::iterator i = misc::dir2index.find(p);
+	if (i != misc::dir2index.end())
 		idx = i->second;
 
 	string http_header = "HTTP/1.1 200 OK\r\n"
@@ -625,8 +625,8 @@ int lonely_http::HEAD()
 			if (stat() == 0)
 				cl = cur_stat.st_size;
 			else {
-				map<string, string>::iterator i = NS_Misc::dir2index.find(o_path);
-				if (i == NS_Misc::dir2index.end())
+				map<string, string>::iterator i = misc::dir2index.find(o_path);
+				if (i == misc::dir2index.end())
 					cl = 0;
 				else
 					cl = i->second.size();

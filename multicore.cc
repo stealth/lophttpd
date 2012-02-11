@@ -6,8 +6,7 @@
 
 
 
-#ifdef linux
-#ifndef ANDROID
+#if defined linux && !defined ANDROID
 
 #include <cstdio>
 #include <cstdlib>
@@ -20,7 +19,7 @@
 #include "config.h"
 
 
-namespace NS_Misc {
+namespace misc {
 
 using namespace std;
 
@@ -34,7 +33,7 @@ static int get_cores()
 
 	FILE *f = fopen("/proc/cpuinfo", "r");
 	if (!f) {
-		err = "NS_Misc::get_cores:";
+		err = "misc::get_cores:";
 		err += strerror(errno);
 		return -1;
 	}
@@ -73,14 +72,14 @@ int setup_multicore(int n)
 
 	cpu_set_t *cpuset = CPU_ALLOC(n);
 	if (!cpuset) {
-		err = "NS_Misc::setup_multicore: OOM";
+		err = "misc::setup_multicore: OOM";
 		return -1;
 	}
 	size_t size = CPU_ALLOC_SIZE(n);
 	CPU_ZERO_S(size, cpuset);
 	CPU_SET_S(0, size, cpuset);
 	if (sched_setaffinity(getpid(), size, cpuset) < 0) {
-		err = "NS_Misc::setup_multicore::sched_setaffinity:";
+		err = "misc::setup_multicore::sched_setaffinity:";
 		err += strerror(errno);
 		CPU_FREE(cpuset);
 		return -1;
@@ -92,7 +91,7 @@ int setup_multicore(int n)
 	for (int i = 1; i < n; ++i) {
 		pid = fork();
 		if (pid < 0) {
-			err = "NS_Misc::setup_multicore::fork:";
+			err = "misc::setup_multicore::fork:";
 			err += strerror(errno);
 			CPU_FREE(cpuset);
 			return -1;
@@ -101,7 +100,7 @@ int setup_multicore(int n)
 		CPU_ZERO_S(size, cpuset);
 		CPU_SET_S(i, size, cpuset);
 		if (sched_setaffinity(getpid(), size, cpuset) < 0) {
-			err = "NS_Misc::setup_multicore::sched_setaffinity:";
+			err = "misc::setup_multicore::sched_setaffinity:";
 			err += strerror(errno);
 			CPU_FREE(cpuset);
 			return -1;
@@ -117,10 +116,9 @@ int setup_multicore(int n)
 
 }
 
-#endif
 #else
 
-namespace NS_Misc {
+namespace misc {
 
 int my_core = 0;
 

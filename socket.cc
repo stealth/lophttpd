@@ -45,7 +45,7 @@
 #include <cstdlib>
 #include "socket.h"
 
-namespace NS_Socket {
+namespace ns_socket {
 
 using namespace std;
 
@@ -63,7 +63,7 @@ int nodelay(int sock)
 	socklen_t len = sizeof(one);
 
 	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &one, len) < 0) {
-		error = "NS_Socket::nodelay::setsockopt: ";
+		error = "ns_socket::nodelay::setsockopt: ";
 		error += strerror(errno);
 		return -1;
 	}
@@ -78,7 +78,7 @@ int reuse(int sock)
 	socklen_t len = sizeof(one);
 
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, len) < 0) {
-		error = "NS_Socket::reuse::setsockopt: ";
+		error = "ns_socket::reuse::setsockopt: ";
 		error += strerror(errno);
 		return -1;
 	}
@@ -98,7 +98,7 @@ int bind_local(int sock, const string &host, const string &port, bool do_listen,
 	hints.ai_socktype = SOCK_STREAM;
 
 	if ((r = getaddrinfo(host.c_str(), port.c_str(), &hints, &ai)) < 0) {
-		error = "NS_Socket::bind_local::getaddrinfo:";
+		error = "ns_socket::bind_local::getaddrinfo:";
 		error += gai_strerror(r);
 		return -1;
 	}
@@ -107,7 +107,7 @@ int bind_local(int sock, const string &host, const string &port, bool do_listen,
 		return -1;
 
 	if (bind(sock, ai->ai_addr, ai->ai_addrlen) < 0) {
-		error = "NS_Socket::bind_local::bind: ";
+		error = "ns_socket::bind_local::bind: ";
 		error += strerror(errno);
 		return -1;
 	}
@@ -117,7 +117,7 @@ int bind_local(int sock, const string &host, const string &port, bool do_listen,
 	if (do_listen) {
 		if (listen(sock, 10000) < 0) {
 			if (listen(sock, SOMAXCONN) < 0) {
-				error = "NS_Socket::bind_local::listen: ";
+				error = "ns_socket::bind_local::listen: ";
 				error += strerror(errno);
 				return -1;
 			}
@@ -145,7 +145,7 @@ int bind_local(int sock, u_int16_t port, bool do_listen, int tries)
 		saddr.sin_port = htons(port + i);
 		if (bind(sock, (struct sockaddr*)&saddr, sizeof(saddr)) < 0 && 
 		    (errno != EADDRINUSE || i == tries - 1)) {
-			error = "NS_Socket::bind_local::bind: ";
+			error = "ns_socket::bind_local::bind: ";
 			error += strerror(errno);
 			return -1;
 		} else {
@@ -156,7 +156,7 @@ int bind_local(int sock, u_int16_t port, bool do_listen, int tries)
 
 	if (do_listen) {
 		if (listen(sock, SOMAXCONN) < 0) {
-			error = "NS_Socket::bind_local::listen: ";
+			error = "ns_socket::bind_local::listen: ";
 			error += strerror(errno);
 			return -1;
 		}
@@ -169,7 +169,7 @@ int tcp_connect_nb(const struct addrinfo &ai, uint16_t local_port)
 {
 	int sock = socket(ai.ai_family, ai.ai_socktype, 0);
 	if (sock < 0) {
-		error = "NS_Socket::tcp_connect_nb::socket:";
+		error = "ns_socket::tcp_connect_nb::socket:";
 		error += strerror(errno);
 		return -1;
 	}
@@ -181,24 +181,24 @@ int tcp_connect_nb(const struct addrinfo &ai, uint16_t local_port)
 		if (bind_local(sock, local_port, 0, 1000) < 0)
 			return -1;
 	}
-	
+
 	int f = O_RDWR;
 #ifndef GETFL_OPTIMIZATION
 	if ((f = fcntl(sock, F_GETFL, 0)) < 0) {
-		error = "NS_Socket::tcp_connect_nb::fcntl:";
+		error = "ns_socket::tcp_connect_nb::fcntl:";
 		error += strerror(errno);
 		return -1;
 	}
 #endif
 	if (fcntl(sock, F_SETFL, f|O_NONBLOCK) < 0) {
-		error = "NS_Socket::tcp_connect_nb::fcntl:";
+		error = "ns_socket::tcp_connect_nb::fcntl:";
 		error += strerror(errno);
 		return -1;
 	}
 
 	if (connect(sock, ai.ai_addr, ai.ai_addrlen) < 0 &&
 	    errno != EINPROGRESS) {
-		error = "NS_Socket::tcp_connect_nb::fcntl:";
+		error = "ns_socket::tcp_connect_nb::fcntl:";
 		error += strerror(errno);
 		return -1;
 	}
@@ -211,7 +211,7 @@ int finish_connecting(int fd)
 	int e = 0;
 	socklen_t len = sizeof(error);
 	if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &e, &len) < 0 || e < 0) {
-		error = "NS_Socket::finish_connecting::getsockopt:";
+		error = "ns_socket::finish_connecting::getsockopt:";
 		error += strerror(errno);
 		return -1;
 	}

@@ -42,8 +42,8 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/resource.h>
-#include <sys/prctl.h>
-#include <sys/capability.h>
+//#include <sys/prctl.h>
+//#include <sys/capability.h>
 #include <signal.h>
 #include <cstring>
 #include "config.h"
@@ -128,8 +128,10 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+#if 0
 	if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) < 0)
 		die("prctl");
+#endif
 
 	chdir("/");
 	if (chroot(rproxy_config::root.c_str()) < 0)
@@ -141,7 +143,7 @@ int main(int argc, char **argv)
 		die("initgroups", euid == 0);
 	if (setuid(pw->pw_uid) < 0)
 		die("setuid", euid == 0);
-
+#if 0
 	cap_t my_caps;
 	cap_value_t cv[2] = {CAP_NET_ADMIN, CAP_NET_BIND_SERVICE};
 
@@ -154,6 +156,7 @@ int main(int argc, char **argv)
 	if (cap_set_proc(my_caps) < 0)
 		die("cap_set_proc");
 	cap_free(my_caps);
+#endif
 
 	if (chdir("/") < 0)
 		die("chdir");

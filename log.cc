@@ -59,6 +59,9 @@ int log_provider::open_log(const string &logfile, const string &method, int core
 
 	if (method != "mmap")
 		flags |= O_APPEND;
+	// safe default
+
+	do_log = &log_provider::write_log;
 
 	char lfile[1024];
 	snprintf(lfile, sizeof(lfile), "%s.%d", logfile.c_str(), core);
@@ -68,9 +71,6 @@ int log_provider::open_log(const string &logfile, const string &method, int core
 		err += strerror(errno);
 		return -1;
 	}
-
-	// safe default
-	do_log = &log_provider::write_log;
 
 #ifndef ANDROID
 	memset(&log_aio, 0, sizeof(log_aio));
