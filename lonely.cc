@@ -605,9 +605,10 @@ int lonely_http::HEAD()
 	string head;
 	char content[128];
 	size_t cl = 0;
+	string &p = fd2state[cur_peer]->path;
 
 	string logstr = "HEAD ";
-	logstr += fd2state[cur_peer]->path;
+	logstr += p;
 	logstr += "\n";
 	log(logstr);
 
@@ -620,25 +621,19 @@ int lonely_http::HEAD()
 		head = "HTTP/1.1 200 OK\r\n";
 
 		if (S_ISDIR(cur_stat.st_mode)) {
-			string o_path = fd2state[cur_peer]->path;
-			fd2state[cur_peer]->path += "/index.html";
-			if (stat() == 0)
-				cl = cur_stat.st_size;
-			else {
-				map<string, string>::iterator i = misc::dir2index.find(o_path);
-				if (i == misc::dir2index.end())
-					cl = 0;
-				else
-					cl = i->second.size();
-
-				// Not needed, since request is finished here
-				//fd2state[cur_peer]->path = o_path;
+			map<string, string>::iterator i = misc::dir2index.find(p);
+			if (i != misc::dir2index.end()) {
+				cl = i->second.size();
+			} else {
+				p += "/index.html";
+				if (stat() == 0)
+					cl = cur_stat.st_size;
 			}
 			head += "Accept-Ranges: none\r\nDate: ";
 		} else {
 			cl = cur_stat.st_size;
-			if (fd2state[cur_peer]->path.find(".html") != string::npos ||
-		    	    fd2state[cur_peer]->path.find(".htm") != string::npos)
+			// No Range: for HTML
+			if (fd2state[cur_peer]->ct == 1)
 				head += "Accept-Ranges: none\r\nDate: ";
 			else
 				head += "Accept-Ranges: bytes\r\nDate: ";
@@ -724,8 +719,7 @@ void lonely_http::clear_cache()
 	for (map<inode, int>::iterator it = file_cache.begin(); it != file_cache.end();) {
 		if (dont_close.find(it->first) == dont_close.end()) {
 			close(it->second);
-			file_cache.erase(it);
-			it = file_cache.begin();
+			file_cache.erase(it++);
 			continue;
 		}
 		++it;
@@ -911,19 +905,20 @@ int lonely_http::GETPOST()
 		// No Range: requests for directories
 		if (cur_range_requested)
 			return send_error(HTTP_ERROR_416);
-		string o_path = fd2state[cur_peer]->path;
-		// index.html exists? send!
-		fd2state[cur_peer]->path += "/index.html";
-		if (stat() == 0 && (S_ISREG(cur_stat.st_mode))) {
-			fd2state[cur_peer]->offset = 0;
-			fd2state[cur_peer]->copied = 0;
-			fd2state[cur_peer]->left = cur_stat.st_size;
-			if (transfer() < 0)
-				return send_error(HTTP_ERROR_404);
-		} else {
-			fd2state[cur_peer]->path = o_path;
+		if (misc::dir2index.count(fd2state[cur_peer]->path) > 0) {
 			if (send_genindex() < 0)
 				return -1;
+		} else {
+			// index.html exists? send!
+			fd2state[cur_peer]->path += "/index.html";
+			if (stat() == 0 && (S_ISREG(cur_stat.st_mode))) {
+				fd2state[cur_peer]->offset = 0;
+				fd2state[cur_peer]->copied = 0;
+				fd2state[cur_peer]->left = cur_stat.st_size;
+				if (transfer() < 0)
+					return send_error(HTTP_ERROR_404);
+			} else
+				return send_error(HTTP_ERROR_404);
 		}
 	} else {
 		return send_error(HTTP_ERROR_404);
