@@ -40,6 +40,7 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <sys/time.h>
+#include <fcntl.h>
 #include "socket.h"
 #include "lonely.h"
 #include "config.h"

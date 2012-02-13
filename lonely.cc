@@ -62,6 +62,7 @@
 #include <sys/sendfile.h>
 #else
 #include <sys/uio.h>
+#include <sys/disk.h>
 #endif
 
 using namespace std;
@@ -519,6 +520,10 @@ int lonely_http::transfer()
 {
 	int fd = open();
 	if (fd < 0) {
+		// callers of transfer() must not send_error() themself on -1,
+		// as they cannot know whether a failure appeared before or after
+		// send_header() call. Thus transfer() sends its erros themself.
+		send_error(HTTP_ERROR_500);
 		err = "lonely_http::transfer::open:";
 		err += strerror(errno);
 		return -1;
@@ -533,6 +538,8 @@ int lonely_http::transfer()
 	size_t n = fd2state[cur_peer]->left;
 	if (n > mss)
 		n = mss;
+	if (n > 0x10000)
+		n = 0x10000;
 
 #ifdef linux
 	ssize_t r = sendfile(cur_peer, fd, &fd2state[cur_peer]->offset, n);
@@ -543,12 +550,31 @@ int lonely_http::transfer()
 #else
 // FreeBSD tested at least
 	off_t sbytes = 0;
-	ssize_t r = sendfile(fd, cur_peer, fd2state[cur_peer]->offset, n,
+	ssize_t r = 0;
+
+	if (fd2state[cur_peer]->sendfile) {
+		r = sendfile(fd, cur_peer, fd2state[cur_peer]->offset, n,
 	                     NULL, &sbytes, 0);
-	if (sbytes > 0) {
-		fd2state[cur_peer]->offset += sbytes;
-		fd2state[cur_peer]->left -= sbytes;
-		fd2state[cur_peer]->copied += sbytes;
+		if (sbytes > 0) {
+			fd2state[cur_peer]->offset += sbytes;
+			fd2state[cur_peer]->left -= sbytes;
+			fd2state[cur_peer]->copied += sbytes;
+		}
+	// On FreeBSD, device files do not support sendfile()
+	} else {
+		char buf[n];
+		r = pread(fd, buf, n, fd2state[cur_peer]->offset);
+		if (r > 0) {
+			// write(), not writen()
+			r = write(cur_peer, buf, r);
+			if (r > 0) {
+				fd2state[cur_peer]->offset += r;
+				fd2state[cur_peer]->left -= r;
+				fd2state[cur_peer]->copied += r;
+			}
+		}
+		if (r == 0)
+			r = -1;
 	}
 #endif
 
@@ -568,7 +594,7 @@ int lonely_http::transfer()
 	} else if (fd2state[cur_peer]->left == 0) {
 		//close(pf.fd); Do not close, due to caching
 		fd2state[cur_peer]->state = STATE_CONNECTED;
-		fd2state[cur_peer]->header_time  = 0;
+		fd2state[cur_peer]->header_time = 0;
 	} else {
 		fd2state[cur_peer]->state = STATE_TRANSFERING;
 	}
@@ -776,18 +802,30 @@ int lonely_http::stat()
 
 	if (r == 0) {
 		if (!S_ISDIR(cur_stat.st_mode) && !S_ISREG(cur_stat.st_mode) &&
-		    !S_ISBLK(cur_stat.st_mode) && !S_ISLNK(cur_stat.st_mode))
+		    !S_ISBLK(cur_stat.st_mode) && !S_ISCHR(cur_stat.st_mode))
 			return -1;
 		// special case for blockdevices; if not already fetched size,
 		// put it into cur_stat
+#ifdef linux
 		if (cur_stat.st_size == 0 && S_ISBLK(cur_stat.st_mode)) {
-			int fd = ::open(p.c_str(), O_RDONLY);
+#else
+		if (cur_stat.st_size == 0 && S_ISCHR(cur_stat.st_mode)) {
+#endif
+			int fd = ::open(p.c_str(), O_RDONLY|O_NOCTTY);
 			if (fd < 0)
 				return -1;
+#ifdef linux
 			if (ioctl(fd, BLKGETSIZE64, &cur_stat.st_size) < 0) {
 				close(fd);
 				return -1;
 			}
+#else
+			if (ioctl(fd, DIOCGMEDIASIZE, &cur_stat.st_size) < 0) {
+				close(fd);
+				return -1;
+			}
+			fd2state[cur_peer]->sendfile = 0;
+#endif
 			close(fd);
 			ct = 0;
 		}
@@ -816,13 +854,13 @@ int lonely_http::open()
 	if (it != file_cache.end()) {
 		fd = it->second;
 	} else {
-		fd = ::open(fd2state[cur_peer]->path.c_str(), O_RDONLY);
+		fd = ::open(fd2state[cur_peer]->path.c_str(), O_RDONLY|O_NOCTTY);
 		if (fd >= 0) {
 			file_cache[i] = fd;
 		// Too many open files? Drop caches
 		} else if (errno == EMFILE || errno == ENFILE) {
 			clear_cache();
-			fd = ::open(fd2state[cur_peer]->path.c_str(), O_RDONLY);
+			fd = ::open(fd2state[cur_peer]->path.c_str(), O_RDONLY|O_NOCTTY);
 			if (fd >= 0)
 				file_cache[i] = fd;
 		}
@@ -885,7 +923,7 @@ int lonely_http::GETPOST()
 
 	int r = 0;
 	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode) || S_ISBLK(cur_stat.st_mode) ||
-	    S_ISLNK(cur_stat.st_mode))) {
+	    S_ISCHR(cur_stat.st_mode))) {
 		if (cur_end_range == 0)
 			cur_end_range = cur_stat.st_size;
 		if (cur_start_range < 0 ||
@@ -900,7 +938,7 @@ int lonely_http::GETPOST()
 		fd2state[cur_peer]->left = cur_end_range - cur_start_range;
 
 		if (transfer() < 0)
-			return send_error(HTTP_ERROR_404);
+			return -1;
 	} else if (r == 0 && S_ISDIR(cur_stat.st_mode)) {
 		// No Range: requests for directories
 		if (cur_range_requested)
@@ -916,7 +954,7 @@ int lonely_http::GETPOST()
 				fd2state[cur_peer]->copied = 0;
 				fd2state[cur_peer]->left = cur_stat.st_size;
 				if (transfer() < 0)
-					return send_error(HTTP_ERROR_404);
+					return -1;
 			} else
 				return send_error(HTTP_ERROR_404);
 		}

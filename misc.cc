@@ -47,6 +47,9 @@
 #include "config.h"
 #include "misc.h"
 
+#ifndef linux
+#include <sys/disk.h>
+#endif
 
 // Android has got not ftw! So we need to write our own
 
@@ -79,7 +82,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		return 0;
 
 	if (!S_ISDIR(st->st_mode) && !S_ISREG(st->st_mode) && !S_ISBLK(st->st_mode) &&
-	    !S_ISLNK(st->st_mode))
+	    !S_ISLNK(st->st_mode) && !S_ISCHR(st->st_mode))
 		return 0;
 
 	if (basename == pathname) {
@@ -166,10 +169,19 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		char sbuf[128];
 		// st is const
 		off_t size = (off_t)st->st_size;
+#ifdef linux
 		if (S_ISBLK(st->st_mode)) {
-			int fd = open(fpath, O_RDONLY);
+#else
+		// On FreeBSD, hdd's are character devices :/
+		if (S_ISCHR(st->st_mode)) {
+#endif
+			int fd = open(fpath, O_RDONLY|O_NOCTTY);
 			if (fd > 0) {
+#ifdef linux
 				ioctl(fd, BLKGETSIZE64, &size);
+#else
+				ioctl(fd, DIOCGMEDIASIZE, &size);
+#endif
 				close(fd);
 			}
 		}
