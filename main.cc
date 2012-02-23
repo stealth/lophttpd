@@ -63,19 +63,20 @@ void die(const char *s, bool please_die = 1)
 
 void help(const char *p)
 {
-	cerr<<"Usage: "<<p<<" [-6] [-R web-root] [-B html-base-tag] [-iHh] [-I IP] [-u user] [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n\n"
+	cerr<<"Usage: "<<p<<" [-6] [-R web-root] [-B html-base-tag] [-iH] [-I IP] [-u user]\n"
+	    <<"\t\t [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n\n"
 	    <<"\t\t -6 : use IPv6, default is IPv4\n"
 	    <<"\t\t -R : web-root, default "<<httpd_config::root<<endl
 	    <<"\t\t -B : <base> 'http://...' tag, if operating behind a proxy\n"
 	    <<"\t\t -i : use autoindexing\n"
 	    <<"\t\t -I : IP(6) to bind to, default {INADDR_ANY}\n"
 	    <<"\t\t -H : use vhosts (requires vhost setup in web-root)\n"
-	    <<"\t\t -h : this help\n"
 	    <<"\t\t -u : run as this user, default "<<httpd_config::user<<endl
 	    <<"\t\t -l : logfile, default "<<httpd_config::logfile<<endl
 	    <<"\t\t -L : logprovider, default "<<httpd_config::log_provider<<endl
 	    <<"\t\t -n : number of CPU cores to use, default all"<<endl
 	    <<"\t\t -p : port, default "<<httpd_config::port<<endl
+	    <<"\t\t -q : quiet mode; don't generate any logs or index.html files\n"
 	    <<"\t\t -S : sendfile() chunksize (no need to change), default: "<<httpd_config::mss<<endl<<endl;
 	exit(errno);
 }
@@ -122,7 +123,7 @@ int main(int argc, char **argv)
 		cerr<<"Continuing in UNSAFE mode!\n\n";
 	}
 
-	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:")) != -1) {
+	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:q")) != -1) {
 		switch (c) {
 		case '6':
 			httpd_config::host = "::0";
@@ -161,11 +162,17 @@ int main(int argc, char **argv)
 		case 'B':
 			httpd_config::base = optarg;
 			break;
+		case 'q':
+			httpd_config::quiet = 1;
+			break;
 		case 'h':
 		default:
 			help(*argv);
 		}
 	}
+
+	cout<<"Using webroot '"<<httpd_config::root<<"' and user '"<<httpd_config::user
+	    <<"'.\nRun with '-h' if you need help. Starting up ...\n\n";
 
 	uid_t euid = geteuid();
 
@@ -189,9 +196,11 @@ int main(int argc, char **argv)
 	misc::setup_multicore(httpd_config::cores);
 
 	// Every core has its own logfile to avoid locking
-	if (httpd->open_log(httpd_config::logfile, httpd_config::log_provider, misc::my_core) < 0) {
-		cerr<<"ERROR: opening logfile: "<<httpd->why()<<endl;
-		cerr<<"continuing without logging!\n";
+	if (!httpd_config::quiet) {
+		if (httpd->open_log(httpd_config::logfile, httpd_config::log_provider, misc::my_core) < 0) {
+			cerr<<"ERROR: opening logfile: "<<httpd->why()<<endl;
+			cerr<<"continuing without logging!\n";
+		}
 	}
 
 	struct passwd *pw = getpwnam(httpd_config::user.c_str());

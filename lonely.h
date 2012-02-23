@@ -227,9 +227,13 @@ public:
 	lonely_http(size_t s = 1024)
 	        : cur_start_range(0), cur_end_range(0),
 		  cur_range_requested(0), cur_request(HTTP_REQUEST_NONE),
-	          mss(s), vhosts(0) {};
+	          mss(s), vhosts(0)
+	{
+		if (mss > 0x10000)
+			mss = 0x10000;
+	}
 
-	virtual ~lonely_http() {};
+	virtual ~lonely_http() {}
 
 	int send_genindex();
 

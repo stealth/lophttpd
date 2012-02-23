@@ -4,11 +4,15 @@ lots of performance httpd
 lophttpd was written to demonstrate (to myself) that it is possible
 to have a webserver running in a single thread and handling multiple
 connections at the same time. The ammount of connections is only limited by the
-maximum number of open files per process (65k) and by your CPU/network
+OS's maximum number of open files per process and by your CPU/network
 speed.
 
 Scheduling of connections is done in user-space by lophttpd. It uses
-sendfile(2) call to get a good download performance.
+sendfile(2) call and caching to get its good download performance.
+
+lophttpd can be used to serv heavy loaded sites to deliver static content:
+To serve software/package repositories, update servers, content delivery
+networks, ISO's, large image and video databases, tarballs etc.
 
 Features:
 
@@ -74,7 +78,11 @@ of MB inside RAM. Since lhttpd is walking the webroot as root when
 generating the index, take care that users dont create large FS-trees
 so that lhttpd is forced to generate junk.
 Generating indexes for large directories, containing 100k of files, can
-take some time.
+take some time. If the "-q" parameter is passed, generated indexes
+are NOT written to disk and logs are not written. This is to run in a clean
+mode on Android devices without leaving any trace if you do forensics
+on the device, since lophttpd allows you to download whole partitions
+as block devices.
 
 Since version 0.82 lophttpd contains an experimental feature to
 speed up logging. Since writing 1000's of logs per second can

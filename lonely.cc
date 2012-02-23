@@ -85,7 +85,6 @@ struct ext2CT {
 	{".cc", "text/x-c++src"},
 	{".cpp", "text/x-c++src"},
 	{".cxx", "text/x-c++src"},
-	{".C", "text/x-c++src"},
 	{".dtd", "text/x-dtd"},
 	{".dvi", "application/x-dvi"},
 	{".fig", "image/x-xfig"},
@@ -181,14 +180,18 @@ int lonely<state_engine>::init(const string &host, const string &port, int a)
 
 	// allocate poll array
 	struct rlimit rl;
-	rl.rlim_cur = (1<<16)+1;
+	rl.rlim_cur = (1<<18);
 	rl.rlim_max = rl.rlim_cur;
 
 	if (setrlimit(RLIMIT_NOFILE, &rl) < 0) {
-		if (getrlimit(RLIMIT_NOFILE, &rl) < 0) {
-			err = "lonely::init::getrlimit:";
-			err += strerror(errno);
-			return -1;
+		rl.rlim_cur = (1<<16);
+		rl.rlim_max = rl.rlim_cur;
+		if (setrlimit(RLIMIT_NOFILE, &rl) < 0) {
+			if (getrlimit(RLIMIT_NOFILE, &rl) < 0) {
+				err = "lonely::init::getrlimit:";
+				err += strerror(errno);
+				return -1;
+			}
 		}
 	}
 
@@ -538,8 +541,6 @@ int lonely_http::transfer()
 	size_t n = fd2state[cur_peer]->left;
 	if (n > mss)
 		n = mss;
-	if (n > 0x10000)
-		n = 0x10000;
 
 #ifdef linux
 	ssize_t r = sendfile(cur_peer, fd, &fd2state[cur_peer]->offset, n);
@@ -606,6 +607,7 @@ int lonely_http::transfer()
 template<typename state_engine>
 void lonely<state_engine>::log(const string &msg)
 {
+	// in quiet mode, logger is NULL
 	if (!logger)
 		return;
 

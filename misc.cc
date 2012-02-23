@@ -266,6 +266,12 @@ void generate_index(const string &path)
 		string &html = i->second;
 		html += "</table><p id=\"bottom\"><a href=\"http://github.com/stealth/lophttpd\">lophttpd powered</a></p></body></html>";
 
+		// in quiet mode, dont drop index.html files
+		if (httpd_config::quiet) {
+			++i;
+			continue;
+		}
+
 		// if running multicore, only master needs to create files
 		if (httpd_config::master && html.size() > index_max_size) {
 			string path = i->first;
