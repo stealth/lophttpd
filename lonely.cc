@@ -442,6 +442,30 @@ int lonely<state_engine>::open_log(const string &logfile, const string &method, 
 }
 
 
+template<typename state_engine>
+void lonely<state_engine>::log(const string &msg)
+{
+	// in quiet mode, logger is NULL
+	if (!logger)
+		return;
+
+	string prefix = local_date;
+
+	if (fd2state[cur_peer]) {
+		prefix += ": ";
+		prefix += fd2state[cur_peer]->from_ip;
+		prefix += ": ";
+	} else
+		prefix += ": <no client context>: ";
+
+	prefix += msg;
+	if (msg.c_str()[msg.size() - 1] != '\n')
+		prefix += "\n";
+
+	logger->log(prefix);
+}
+
+
 int lonely_http::send_http_header()
 {
 	string http_header;
@@ -549,29 +573,6 @@ int lonely_http::transfer()
 	return 0;
 }
 
-
-template<typename state_engine>
-void lonely<state_engine>::log(const string &msg)
-{
-	// in quiet mode, logger is NULL
-	if (!logger)
-		return;
-
-	string prefix = local_date;
-
-	if (fd2state[cur_peer]) {
-		prefix += ": ";
-		prefix += fd2state[cur_peer]->from_ip;
-		prefix += ": ";
-	} else
-		prefix += ": <no client context>: ";
-
-	prefix += msg;
-	if (msg.c_str()[msg.size() - 1] != '\n')
-		prefix += "\n";
-
-	logger->log(prefix);
-}
 
 
 int lonely_http::HEAD()

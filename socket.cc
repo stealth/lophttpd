@@ -198,6 +198,7 @@ int tcp_connect_nb(const struct addrinfo &ai, uint16_t local_port)
 	return sock;
 }
 
+
 int finish_connecting(int fd)
 {
 	int e = 0;
