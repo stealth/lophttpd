@@ -84,8 +84,6 @@ int device_size(const std::string &path, size_t &size)
 	}
 	close(fd);
 	errno = saved_errno;
-
-	sendfile = 0;
 	return r;
 }
 
