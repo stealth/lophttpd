@@ -75,7 +75,7 @@ int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &co
 		r = pread(fd, buf, n, *offset);
 		if (r > 0) {
 			// write(), not writen()
-			r = write(cur_peer, buf, r);
+			r = write(peer, buf, r);
 			if (r > 0) {
 				*offset += r;
 				left -= r;
