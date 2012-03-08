@@ -1,5 +1,5 @@
 #
-# This is the Makefile for the Linux flavor
+# This is the Makefile for the BSD flavor
 #
 
 CXX=c++ -Wall -O2
@@ -41,8 +41,8 @@ misc.o: misc.cc misc.h
 main.o: main.cc
 	$(CXX) -c main.cc
 
-flavor.o: flavor-linux.cc flavor.h
-	$(CXX) -c flavor-linux.cc -o flavor.o
+flavor.o: flavor-bsd.cc flavor.h
+	$(CXX) -c flavor-bsd.cc -o flavor.o
 
 socket.o: socket.cc socket.h
 	$(CXX) -c socket.cc

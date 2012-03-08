@@ -1,3 +1,7 @@
+#
+# This is the Makefile for the Android flavor
+#
+
 ROOT=/S/SOURCES
 NDK=android-ndk-r7
 
@@ -8,7 +12,7 @@ INC=-I$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/include\
 LIB=-Wl,$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/libs/armeabi/libgnustl_static.a
 
 
-CXX=$(PREFIX)c++ $(INC) $(SYSROOT) -Wall -O2 -DGETFL_OPTIMIZATION -DANDROID
+CXX=$(PREFIX)c++ $(INC) $(SYSROOT) -Wall -O2 -DANDROID
 LD=$(PREFIX)c++ $(SYSROOT)
 
 all: lhttpd
@@ -19,8 +23,8 @@ clean:
 distclean: clean
 	rm -f lhttpd
 
-lhttpd: lonely.o socket.o main.o misc.o log.o multicore.o config.o
-	$(LD) lonely.o socket.o main.o misc.o log.o multicore.o config.o $(LIB) -static -o lhttpd
+lhttpd: lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o
+	$(LD) lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o $(LIB) -static -o lhttpd
 
 multicore.o: multicore.cc multicore.h
 	$(CXX) -c multicore.cc
@@ -39,6 +43,9 @@ socket.o: socket.cc socket.h
 
 lonely.o: lonely.cc lonely.h
 	$(CXX) -c lonely.cc
+
+flavor.o: flavor-android.cc flavor.h
+	$(CXX) -c flavor-android.cc -o flavor.o
 
 config.o: config.cc config.h
 	$(CXX) -c config.cc

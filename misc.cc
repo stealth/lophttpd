@@ -46,10 +46,8 @@
 #include <fcntl.h>
 #include "config.h"
 #include "misc.h"
+#include "flavor.h"
 
-#ifndef linux
-#include <sys/disk.h>
-#endif
 
 // Android has got not ftw! So we need to write our own
 
@@ -168,22 +166,10 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += "</th><th>";
 		char sbuf[128];
 		// st is const
-		off_t size = (off_t)st->st_size;
-#ifdef linux
-		if (S_ISBLK(st->st_mode)) {
-#else
-		// On FreeBSD, hdd's are character devices :/
-		if (S_ISCHR(st->st_mode)) {
-#endif
-			int fd = open(fpath, O_RDONLY|O_NOCTTY);
-			if (fd > 0) {
-#ifdef linux
-				ioctl(fd, BLKGETSIZE64, &size);
-#else
-				ioctl(fd, DIOCGMEDIASIZE, &size);
-#endif
-				close(fd);
-			}
+		size_t size = (size_t)st->st_size;
+		char dummy = 0;
+		if (!size && flavor::servable_device(*st)) {
+			flavor::device_size(fpath, size, dummy);
 		}
 		if (size > 1024*1024*1024)
 			sprintf(sbuf, "%.2f GB", ((double)size)/(1024*1024*1024));

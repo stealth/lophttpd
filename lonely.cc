@@ -46,8 +46,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
-#include <sys/ioctl.h>
-#include <sys/mount.h>
+
 #include <sys/stat.h>
 #include <sys/resource.h>
 #include <netinet/in.h>
@@ -58,12 +57,8 @@
 #include "rproxy.h"
 #include "misc.h"
 #include "socket.h"
-#ifdef linux
-#include <sys/sendfile.h>
-#else
-#include <sys/uio.h>
-#include <sys/disk.h>
-#endif
+#include "flavor.h"
+
 
 using namespace std;
 using namespace ns_socket;
@@ -279,9 +274,6 @@ void lonely<state_engine>::calc_max_fd()
 int lonely_http::loop()
 {
 	int i = 0;
-#if !defined linux || defined ANDROID
-	int flags = O_RDWR;
-#endif
 	struct sockaddr_in sin;
 	struct sockaddr_in6 sin6;
 	socklen_t slen = sizeof(sin);
@@ -350,11 +342,7 @@ int lonely_http::loop()
 
 				int afd = 0;
 				for (;;) {
-#if defined linux && !defined ANDROID
-					afd = accept4(i, saddr, &slen, SOCK_NONBLOCK);
-#else
-					afd = accept(i, saddr, &slen);
-#endif
+					afd = flavor::accept(i, saddr, &slen, flavor::NONBLOCK);
 					if (afd < 0) {
 						if (errno == EMFILE || errno == ENFILE)
 							clear_cache();
@@ -363,12 +351,6 @@ int lonely_http::loop()
 					pfds[afd].fd = afd;
 					pfds[afd].events = POLLIN;
 					pfds[afd].revents = 0;
-#if !defined linux || defined ANDROID
-#ifndef GETFL_OPTIMIZATION
-					flags = fcntl(afd, F_GETFL);
-#endif
-					fcntl(afd, F_SETFL, flags|O_NONBLOCK);
-#endif
 
 					// We reuse previously allocated but 'cleanup'ed memory to save
 					// speed for lotsa new/delete calls on heavy traffic
@@ -521,7 +503,7 @@ int lonely_http::send_genindex()
 
 int lonely_http::transfer()
 {
-	int fd = open();
+	int r = 0, fd = open();
 	if (fd < 0) {
 		// callers of transfer() must not send_error() themself on -1,
 		// as they cannot know whether a failure appeared before or after
@@ -542,53 +524,17 @@ int lonely_http::transfer()
 	if (n > mss)
 		n = mss;
 
-#ifdef linux
-	ssize_t r = sendfile(cur_peer, fd, &fd2state[cur_peer]->offset, n);
-	if (r > 0) {
-		fd2state[cur_peer]->left -= r;
-		fd2state[cur_peer]->copied += r;
-	}
-#else
-// FreeBSD tested at least
-	off_t sbytes = 0;
-	ssize_t r = 0;
-
-	if (fd2state[cur_peer]->sendfile) {
-		r = sendfile(fd, cur_peer, fd2state[cur_peer]->offset, n,
-	                     NULL, &sbytes, 0);
-		if (sbytes > 0) {
-			fd2state[cur_peer]->offset += sbytes;
-			fd2state[cur_peer]->left -= sbytes;
-			fd2state[cur_peer]->copied += sbytes;
-		}
-	// On FreeBSD, device files do not support sendfile()
-	} else {
-		char buf[n];
-		r = pread(fd, buf, n, fd2state[cur_peer]->offset);
-		if (r > 0) {
-			// write(), not writen()
-			r = write(cur_peer, buf, r);
-			if (r > 0) {
-				fd2state[cur_peer]->offset += r;
-				fd2state[cur_peer]->left -= r;
-				fd2state[cur_peer]->copied += r;
-			}
-		}
-		if (r == 0)
-			r = -1;
-	}
-#endif
+	r = flavor::sendfile(cur_peer, fd, &fd2state[cur_peer]->offset, // updated by sendfile
+	                     n,
+	                     fd2state[cur_peer]->left,		// updated by sendfile
+	                     fd2state[cur_peer]->copied,	// updated by sendfile
+	                     fd2state[cur_peer]->sendfile);
 
 	// Dummy reset of r, if EAGAIN appears on nonblocking socket
 	if (errno == EAGAIN)
 		r = 1;
 
-#ifdef linux
-	if (r <= 0) {
-#else
-// On FreeBSD, 0 retval means success
 	if (r < 0) {
-#endif
 		fd2state[cur_peer]->state = STATE_CONNECTED;
 		fd2state[cur_peer]->keep_alive = 0;
 		return -1;
@@ -803,33 +749,18 @@ int lonely_http::stat()
 	}
 
 	if (r == 0) {
-		if (!S_ISDIR(cur_stat.st_mode) && !S_ISREG(cur_stat.st_mode) &&
-		    !S_ISBLK(cur_stat.st_mode) && !S_ISCHR(cur_stat.st_mode))
+		if (!flavor::servable_file(cur_stat))
 			return -1;
 		// special case for blockdevices; if not already fetched size,
 		// put it into cur_stat
-#ifdef linux
-		if (cur_stat.st_size == 0 && S_ISBLK(cur_stat.st_mode)) {
-#else
-		if (cur_stat.st_size == 0 && S_ISCHR(cur_stat.st_mode)) {
-#endif
-			int fd = ::open(p.c_str(), O_RDONLY|O_NOCTTY);
-			if (fd < 0)
+		if (cur_stat.st_size == 0 && flavor::servable_device(cur_stat)) {
+			// updates size and ->sendfile if apropriate
+			size_t size;
+			if (flavor::device_size(p, size, fd2state[cur_peer]->sendfile) < 0)
 				return -1;
-#ifdef linux
-			if (ioctl(fd, BLKGETSIZE64, &cur_stat.st_size) < 0) {
-				close(fd);
-				return -1;
-			}
-#else
-			if (ioctl(fd, DIOCGMEDIASIZE, &cur_stat.st_size) < 0) {
-				close(fd);
-				return -1;
-			}
-			fd2state[cur_peer]->sendfile = 0;
-#endif
-			close(fd);
+			cur_stat.st_size = size;
 			ct = 0;
+			cacheit = 1;
 		}
 		fd2state[cur_peer]->dev = cur_stat.st_dev;
 		fd2state[cur_peer]->ino = cur_stat.st_ino;

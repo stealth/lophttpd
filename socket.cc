@@ -182,15 +182,7 @@ int tcp_connect_nb(const struct addrinfo &ai, uint16_t local_port)
 			return -1;
 	}
 
-	int f = O_RDWR;
-#ifndef GETFL_OPTIMIZATION
-	if ((f = fcntl(sock, F_GETFL, 0)) < 0) {
-		error = "ns_socket::tcp_connect_nb::fcntl:";
-		error += strerror(errno);
-		return -1;
-	}
-#endif
-	if (fcntl(sock, F_SETFL, f|O_NONBLOCK) < 0) {
+	if (fcntl(sock, F_SETFL, O_RDWR|O_NONBLOCK) < 0) {
 		error = "ns_socket::tcp_connect_nb::fcntl:";
 		error += strerror(errno);
 		return -1;

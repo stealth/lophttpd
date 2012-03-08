@@ -70,7 +70,7 @@ struct http_state {
 	ino_t ino;
 	std::string path, from_ip;
 	int ct;
-	bool sendfile;
+	char sendfile;
 
 	http_state()
 	 : peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),

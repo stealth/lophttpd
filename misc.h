@@ -46,9 +46,6 @@ void generate_index(const std::string &path);
 
 const char *why();
 
-#ifdef ANDROID
-#define BLKGETSIZE64 _IOR(0x12,114,size_t)
-#endif
 
 }
 
