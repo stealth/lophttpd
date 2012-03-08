@@ -70,12 +70,12 @@ struct http_state {
 	ino_t ino;
 	std::string path, from_ip;
 	int ct;
-	char sendfile;
+	bool is_dev;
 
 	http_state()
 	 : peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
 	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), from_ip(""), ct(0),
-	   sendfile(1) {};
+	   is_dev(0) {};
 
 	void cleanup()
 	{
@@ -86,7 +86,7 @@ struct http_state {
 		alive_time = header_time = 0;
 		dev = ino = 0;
 		ct = 0;
-		sendfile = 1;
+		is_dev = 0;
 		state = STATE_NONE;
 		path.clear(); from_ip.clear();
 	}

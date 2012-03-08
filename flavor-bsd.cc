@@ -71,7 +71,7 @@ bool servable_file(const struct stat &st)
 }
 
 
-int device_size(const std::string &path, size_t &size, char &sendfile)
+int device_size(const std::string &path, size_t &size)
 {
 	int fd = ::open(path.c_str(), O_RDONLY|O_NOCTTY);
 	if (fd < 0)
@@ -90,12 +90,12 @@ int device_size(const std::string &path, size_t &size, char &sendfile)
 }
 
 
-int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, bool can_sendfile)
+int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, bool is_device)
 {
 	off_t sbytes = 0;
 	ssize_t r = 0;
 
-	if (can_sendfile) {
+	if (!is_device) {
 		r = ::sendfile(fd, peer, *offset, n, NULL, &sbytes, 0);
 		if (sbytes > 0) {
 			*offset += sbytes;

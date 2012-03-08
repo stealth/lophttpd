@@ -167,9 +167,8 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		char sbuf[128];
 		// st is const
 		size_t size = (size_t)st->st_size;
-		char dummy = 0;
 		if (!size && flavor::servable_device(*st)) {
-			flavor::device_size(fpath, size, dummy);
+			flavor::device_size(fpath, size);
 		}
 		if (size > 1024*1024*1024)
 			sprintf(sbuf, "%.2f GB", ((double)size)/(1024*1024*1024));

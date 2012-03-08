@@ -51,11 +51,11 @@ bool servable_device(const struct stat &);
 
 bool servable_file(const struct stat &);
 
-int device_size(const std::string &, size_t &, char &);
+int device_size(const std::string &, size_t &);
 
-// calls sendfile() if can_sendfile indicates that. returns 0 on success, -1 on error.
+// calls sendfile() if !is_dev indicates that. returns 0 on success, -1 on error.
 // uses normal read/write if sendfile cannot be used. updates offset, left and copied accordingly
-int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, bool can_sendfile);
+int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, bool is_dev);
 
 }
 

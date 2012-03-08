@@ -552,7 +552,7 @@ int lonely_http::transfer()
 	                     n,
 	                     fd2state[cur_peer]->left,		// updated by sendfile
 	                     fd2state[cur_peer]->copied,	// updated by sendfile
-	                     fd2state[cur_peer]->sendfile);
+	                     fd2state[cur_peer]->is_dev);
 
 	// Dummy reset of r, if EAGAIN appears on nonblocking socket
 	if (errno == EAGAIN)
@@ -754,14 +754,17 @@ int lonely_http::stat()
 			return -1;
 		// special case for blockdevices; if not already fetched size,
 		// put it into cur_stat
-		if (cur_stat.st_size == 0 && flavor::servable_device(cur_stat)) {
-			// updates size and ->sendfile if apropriate
-			size_t size;
-			if (flavor::device_size(p, size, fd2state[cur_peer]->sendfile) < 0)
-				return -1;
-			cur_stat.st_size = size;
+		if (flavor::servable_device(cur_stat)) {
+			if (cur_stat.st_size == 0) {
+				// updates size if apropriate
+				size_t size;
+				if (flavor::device_size(p, size) < 0)
+					return -1;
+				cur_stat.st_size = size;
+				cacheit = 1;
+			}
 			ct = 0;
-			cacheit = 1;
+			fd2state[cur_peer]->is_dev = 1;
 		}
 		fd2state[cur_peer]->dev = cur_stat.st_dev;
 		fd2state[cur_peer]->ino = cur_stat.st_ino;
