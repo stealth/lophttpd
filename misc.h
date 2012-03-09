@@ -44,8 +44,20 @@ extern std::map<std::string, std::string> dir2index;
 
 void generate_index(const std::string &path);
 
+int find_ctype(const std::string &);
+
 const char *why();
 
+enum {
+	CONTENT_DATA = 0,
+	CONTENT_HTML = 1
+};
+
+struct ctypes {
+	std::string extension, c_type;
+};
+
+extern struct ctypes content_types[];
 
 }
 

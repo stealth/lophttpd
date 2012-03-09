@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Sebastian Krahmer.
+ * Copyright (C) 2008-2012 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,17 +53,91 @@
 
 namespace misc {
 
+using namespace std;
+
 enum {
 	FTW_D = 1,
 	FTW_F = 2,
 	FTW_L = 4
 };
 
+struct ctypes content_types[] = {
+	// This one must be at index 0 and 1, since we keep a cache of
+	// file <-> content-type with an index to this table
+	{".data", "application/data"},
+	{".html", "text/html"},
 
-using namespace std;
+	{".apk", "application/vnd.android.package-archive"},
+	{".avi", "video/x-msvideo"},
+	{".bmp", "image/bmp"},
+	{".bib", "text/x-bibtex"},
+	{".c", "text/x-csrc"},
+	{".cc", "text/x-c++src"},
+	{".cpp", "text/x-c++src"},
+	{".cxx", "text/x-c++src"},
+	{".dtd", "text/x-dtd"},
+	{".dvi", "application/x-dvi"},
+	{".fig", "image/x-xfig"},
+	{".flv", "application/flash-video"},
+	{".gif", "image/gif"},
+	{".gz", "application/gzip"},
+	{".h", "text/x-chdr"},
+	{".hh", "text/x-chdr"},
+	{".htm", "text/html"},
+	{".ico", "image/x-ico"},
+	{".iso", "application/x-cd-image"},
+	{".java", "text/x-java"},
+	{".jpg", "image/jpg"},
+	{".js", "application/x-javascript"},
+	{".mp3", "audio/mpeg"},
+	{".mpeg", "video/mpeg"},
+	{".mpg", "video/mpeg"},
+	{".ogg", "application/ogg"},
+	{".pdf", "application/pdf"},
+	{".pls", "audio/x-scpls"},
+	{".png", "image/png"},
+	{".ps", "application/postscript"},
+	{".ps.gz", "application/x-gzpostscript"},
+	{".rar", "application/x-rar-compressed"},
+	{".rdf", "text/rdf"},
+	{".rss", "text/rss"},
+	{".sgm", "text/sgml"},
+	{".sgml", "text/sgml"},
+	{".svg", "image/svg+xml"},
+	{".tar", "application/x-tar"},
+	{".tar.Z", "application/x-tarz"},
+	{".tgz", "application/gzip"},
+	{".tiff", "image/tiff"},
+	{".txt", "text/plain"},
+	{".wav", "audio/x-wav"},
+	{".wmv", "video/x-ms-wm"},
+	{".xbm", "image/x-xbitmap"},
+	{".xml", "text/xml"},
+	{".zip", "application/zip"},
+	{".zoo", "application/x-zoo"},
+	{"", ""}
+};
 
 map<string, string> dir2index;
 string err = "";
+
+
+int find_ctype(const string &p)
+{
+	int i = 0;
+
+	for (i = 0; !content_types[i].extension.empty(); ++i) {
+		if (p.size() <= content_types[i].extension.size())
+			continue;
+		if (strcasestr(p.c_str()+p.size() - content_types[i].extension.size(),
+        	       content_types[i].extension.c_str()))
+			break;
+	}
+	if (content_types[i].c_type.empty())
+		i = 0;
+	return i;
+}
+
 
 // if generated indexes exceed this limit, they
 // are written as index.html to disk
@@ -105,7 +179,8 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += "</head>\n<body><h1>Index of ";
 		html += fpath;
 		html += "</h1>";
-		html += "<table border=1><thead><tr><th></th><th>Name</th><th>Last modified</th><th>Size</th></tr>";
+		html += "<table border=1><thead><tr><th></th><th>Name</th><th>Last modified</th><th>Size</th>"
+		        "<th>Content</th></tr>";
 		html += "<th><img src=\"icons/back.png\" alt=\"[DIR]\"></th>";
 		html += "<th><a href=\"";
 
@@ -134,7 +209,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += basename;
 		html += "</th><th>";
 		html += ctime((const time_t *)&st->st_mtime);
-		html += "</th></tr>";
+		html += "</th><th> </th><th>(directory)</th></tr>";
 
 		dir2index[parent] = html;
 	} else if (typeflag & FTW_L) {
@@ -153,7 +228,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += basename;
 		html += "</th><th>";
 		html += ctime((const time_t *)&st->st_mtime);
-		html += "</th></tr>";
+		html += "</th><th> </th><th>(symlink)</th></tr>";
 	} else {
 		string &html = dir2index[parent];
 		html += "<tr><th><img src=\"icons/file.gif\" alt=\"[FILE]\"></th>";
@@ -180,6 +255,9 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 			sprintf(sbuf, "%zd B", size);
 
 		html += sbuf;
+		html += "</th><th>";
+		int i = find_ctype(basename);
+		html += content_types[i].c_type;
 		html += "</th></tr>";
 	}
 	return 0;
@@ -298,5 +376,5 @@ const char *why()
 }
 
 
-}
+} // namespace misc
 

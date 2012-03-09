@@ -64,66 +64,6 @@ using namespace std;
 using namespace ns_socket;
 
 
-struct ext2CT {
-	const std::string extension, c_type;
-} content_types[] = {
-	// This one must be at index 0 and 1, since we keep a cache of
-	// file <-> content-type with an index to this table
-	{".data", "application/data"},
-	{".html", "text/html"},
-
-	{".apk", "application/vnd.android.package-archive"},
-	{".avi", "video/x-msvideo"},
-	{".bmp", "image/bmp"},
-	{".bib", "text/x-bibtex"},
-	{".c", "text/x-csrc"},
-	{".cc", "text/x-c++src"},
-	{".cpp", "text/x-c++src"},
-	{".cxx", "text/x-c++src"},
-	{".dtd", "text/x-dtd"},
-	{".dvi", "application/x-dvi"},
-	{".fig", "image/x-xfig"},
-	{".flv", "application/flash-video"},
-	{".gif", "image/gif"},
-	{".gz", "application/gzip"},
-	{".h", "text/x-chdr"},
-	{".hh", "text/x-chdr"},
-	{".htm", "text/html"},
-	{".ico", "image/x-ico"},
-	{".iso", "application/x-cd-image"},
-	{".java", "text/x-java"},
-	{".jpg", "image/jpg"},
-	{".js", "application/x-javascript"},
-	{".mp3", "audio/mpeg"},
-	{".mpeg", "video/mpeg"},
-	{".mpg", "video/mpeg"},
-	{".ogg", "application/ogg"},
-	{".pdf", "application/pdf"},
-	{".pls", "audio/x-scpls"},
-	{".png", "image/png"},
-	{".ps", "application/postscript"},
-	{".ps.gz", "application/x-gzpostscript"},
-	{".rar", "application/x-rar-compressed"},
-	{".rdf", "text/rdf"},
-	{".rss", "text/rss"},
-	{".sgm", "text/sgml"},
-	{".sgml", "text/sgml"},
-	{".svg", "image/svg+xml"},
-	{".tar", "application/x-tar"},
-	{".tar.Z", "application/x-tarz"},
-	{".tgz", "application/gzip"},
-	{".tiff", "image/tiff"},
-	{".txt", "text/plain"},
-	{".wav", "audio/x-wav"},
-	{".wmv", "video/x-ms-wm"},
-	{".xbm", "image/x-xbitmap"},
-	{".xml", "text/xml"},
-	{".zip", "application/zip"},
-	{".zoo", "application/x-zoo"},
-	{"", ""}
-};
-
-
 // Must match order of http_error_code_t enum
 string http_error_msgs[] = {
 	"400 Bad Request",
@@ -484,7 +424,7 @@ int lonely_http::send_http_header()
 
 	char h_buf[http_header.size() + 128];
 	snprintf(h_buf, sizeof(h_buf), http_header.c_str(),
-	          content_types[fd2state[cur_peer]->ct].c_type.c_str(), fd2state[cur_peer]->left);
+	          misc::content_types[fd2state[cur_peer]->ct].c_type.c_str(), fd2state[cur_peer]->left);
 
 	if (writen(cur_peer, h_buf, strlen(h_buf)) <= 0)
 		return -1;
@@ -618,7 +558,7 @@ int lonely_http::HEAD()
 	head += gmt_date;
 	snprintf(content, sizeof(content), "\r\nContent-Length: %zu\r\nContent-Type: ", cl);
 	head += content;
-	head += content_types[fd2state[cur_peer]->ct].c_type;
+	head += misc::content_types[fd2state[cur_peer]->ct].c_type;
 	head += "\r\nServer: lophttpd\r\nConnection: keep-alive\r\n\r\n";
 
 	if (writen(cur_peer, head.c_str(), head.size()) <= 0)
@@ -705,7 +645,7 @@ void lonely_http::clear_cache()
 int lonely_http::stat()
 {
 	const string &p = fd2state[cur_peer]->path;
-	int r = 0, ct = 0, i = 0;
+	int r = 0, ct = misc::CONTENT_DATA;
 	bool cacheit = 0;
 
 	// do not cache stupid filenames which most likely is an attack
@@ -733,19 +673,9 @@ int lonely_http::stat()
 			// always text/html if dir, if theres no autoindexing,
 			// the content-len will be 0
 			if (S_ISDIR(cur_stat.st_mode))
-				ct = 1;
-			else {
-				// Not cached, so lets also find out about the content-type
-				for (i = 0; !content_types[i].extension.empty(); ++i) {
-					if (p.size() <= content_types[i].extension.size())
-						continue;
-					if (strcasestr(p.c_str()+p.size() - content_types[i].extension.size(),
-				        	       content_types[i].extension.c_str()))
-						break;
-				}
-				if (!content_types[i].c_type.empty())
-					ct = i;
-			}
+				ct = misc::CONTENT_HTML;
+			else
+				ct = misc::find_ctype(p);
 		}
 	}
 
@@ -763,7 +693,7 @@ int lonely_http::stat()
 				cur_stat.st_size = size;
 				cacheit = 1;
 			}
-			ct = 0;
+			ct = misc::CONTENT_DATA;
 			fd2state[cur_peer]->is_dev = 1;
 		}
 		fd2state[cur_peer]->dev = cur_stat.st_dev;
