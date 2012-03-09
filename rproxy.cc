@@ -45,6 +45,7 @@
 #include "lonely.h"
 #include "config.h"
 #include "rproxy.h"
+#include "flavor.h"
 
 
 using namespace rproxy_config;
@@ -124,26 +125,13 @@ int rproxy::loop()
 			if (fd2state[i]->state == STATE_ACCEPTING) {
 				pfds[i].revents = 0;
 				for (;;) {
-#ifdef linux
-					afd = accept4(i, (struct sockaddr *)&sin, &slen, SOCK_NONBLOCK);
-#else
-					afd = accept(i, (struct sockaddr *)&sin, &slen);
-#endif
+					afd = flavor::accept(i, (struct sockaddr *)&sin, &slen, flavor::NONBLOCK);
 					if (afd < 0)
 						break;
 					nodelay(afd);
 					pfds[afd].fd = afd;
 					pfds[afd].events = POLLIN;
 					pfds[afd].revents = 0;
-
-#ifndef linux
-					if (fcntl(afd, F_SETFL, O_RDWR|O_NONBLOCK) < 0) {
-						cleanup(afd);
-						err = "rproxy::loop::fcntl:";
-						err += strerror(errno);
-						return -1;
-					}
-#endif
 
 					if (!fd2state[afd]) {
 						fd2state[afd] = new (nothrow) rproxy_state;

@@ -59,8 +59,8 @@ int log_provider::open_log(const string &logfile, const string &method, int core
 
 	if (method != "mmap")
 		flags |= O_APPEND;
-	// safe default
 
+	// safe default
 	do_log = &log_provider::write_log;
 
 	char lfile[1024];
@@ -72,21 +72,11 @@ int log_provider::open_log(const string &logfile, const string &method, int core
 		return -1;
 	}
 
-#ifndef ANDROID
-	memset(&log_aio, 0, sizeof(log_aio));
-#endif
-
 	log_area = (void *)-1;
 	log_index = 0;
 	log_size = 1<<20;
-#ifdef ANDROID
-	if (method == "aio")
-		do_log = &log_provider::write_log;
-#else
-	if (method == "aio")
-		do_log = &log_provider::aio_log;
-#endif
-	else if (method == "mmap") {
+
+	if (method == "mmap") {
 		if (fstat(log_fd, &st) < 0) {
 			err = "log_provider::open_log::fstat:";
 			err += strerror(errno);
@@ -159,7 +149,7 @@ int log_provider::mmap_log(const string &msg)
 }
 
 
-#ifndef ANDROID
+#ifdef AIO_UNUSED
 int log_provider::aio_log(const string &msg)
 {
 	int count = 0;

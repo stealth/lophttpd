@@ -45,6 +45,8 @@ enum {
 	NONBLOCK = 1
 };
 
+
+// return a (unblocking if NONBLOCK flag is set) accepted socket
 int accept(int, struct sockaddr *, socklen_t *, int);
 
 bool servable_device(const struct stat &);
