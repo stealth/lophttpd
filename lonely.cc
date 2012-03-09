@@ -210,6 +210,44 @@ void lonely<state_engine>::calc_max_fd()
 	}
 }
 
+template<typename state_engine>
+int lonely<state_engine>::open_log(const string &logfile, const string &method, int core = 0)
+{
+	logger = new (nothrow) log_provider;
+	if (!logger) {
+		err = "OOM";
+		return -1;
+	}
+	int r = logger->open_log(logfile, method, core);
+	if (r < 0)
+		err = logger->why();
+	return r;
+}
+
+
+template<typename state_engine>
+void lonely<state_engine>::log(const string &msg)
+{
+	// in quiet mode, logger is NULL
+	if (!logger)
+		return;
+
+	string prefix = local_date;
+
+	if (fd2state[cur_peer]) {
+		prefix += ": ";
+		prefix += fd2state[cur_peer]->from_ip;
+		prefix += ": ";
+	} else
+		prefix += ": <no client context>: ";
+
+	prefix += msg;
+	if (msg.c_str()[msg.size() - 1] != '\n')
+		prefix += "\n";
+
+	logger->log(prefix);
+}
+
 
 int lonely_http::loop()
 {
@@ -366,44 +404,6 @@ const uint8_t lonely<state_engine>::timeout_closing = 3;
 template<typename state_engine>
 const uint8_t lonely<state_engine>::timeout_alive = 30;
 
-
-template<typename state_engine>
-int lonely<state_engine>::open_log(const string &logfile, const string &method, int core = 0)
-{
-	logger = new (nothrow) log_provider;
-	if (!logger) {
-		err = "OOM";
-		return -1;
-	}
-	int r = logger->open_log(logfile, method, core);
-	if (r < 0)
-		err = logger->why();
-	return r;
-}
-
-
-template<typename state_engine>
-void lonely<state_engine>::log(const string &msg)
-{
-	// in quiet mode, logger is NULL
-	if (!logger)
-		return;
-
-	string prefix = local_date;
-
-	if (fd2state[cur_peer]) {
-		prefix += ": ";
-		prefix += fd2state[cur_peer]->from_ip;
-		prefix += ": ";
-	} else
-		prefix += ": <no client context>: ";
-
-	prefix += msg;
-	if (msg.c_str()[msg.size() - 1] != '\n')
-		prefix += "\n";
-
-	logger->log(prefix);
-}
 
 
 int lonely_http::send_http_header()
@@ -789,8 +789,7 @@ int lonely_http::GETPOST()
 		return send_error(HTTP_ERROR_400);
 
 	int r = 0;
-	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode) || S_ISBLK(cur_stat.st_mode) ||
-	    S_ISCHR(cur_stat.st_mode))) {
+	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode) || flavor::servable_device(cur_stat))) {
 		if (cur_end_range == 0)
 			cur_end_range = cur_stat.st_size;
 		if (cur_start_range < 0 ||
