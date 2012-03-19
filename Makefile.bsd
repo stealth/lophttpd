@@ -14,39 +14,39 @@ distclean: clean
 	rm -f lhttpd
 
 lhttpd: lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o
-	$(LD) lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o -o lhttpd -lrt
+	$(LD) $(LDFLAGS) lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o -o lhttpd -lrt
 
 
 frontend: lonely.o socket.o frontend-main.o log.o multicore.o rproxy.o config.o misc.o flavor.o
-	$(LD) lonely.o socket.o frontend-main.o misc.o log.o multicore.o rproxy.o config.o flavor.o -o frontend -lrt
+	$(LD) $(LDFLAGS) lonely.o socket.o frontend-main.o misc.o log.o multicore.o rproxy.o config.o flavor.o -o frontend -lrt
 
 frontend-main.o: frontend-main.cc
-	$(CXX) -c frontend-main.cc
+	$(CXX) $(CFLAGS) -c frontend-main.cc
 
 rproxy.o: rproxy.cc rproxy.h
-	$(CXX) -c rproxy.cc
+	$(CXX) $(CFLAGS) -c rproxy.cc
 
 config.o: config.cc config.h
-	$(CXX) -c config.cc
+	$(CXX) $(CFLAGS) -c config.cc
 
 multicore.o: multicore.cc multicore.h
-	$(CXX) -c multicore.cc
+	$(CXX) $(CFLAGS) -c multicore.cc
 
 log.o: log.cc log.h
-	$(CXX) -c log.cc
+	$(CXX) $(CFLAGS) -c log.cc
 
 misc.o: misc.cc misc.h
-	$(CXX) -c misc.cc
+	$(CXX) $(CFLAGS) -c misc.cc
 
 main.o: main.cc
-	$(CXX) -c main.cc
+	$(CXX) $(CFLAGS) -c main.cc
 
 flavor.o: flavor-bsd.cc flavor.h
-	$(CXX) -c flavor-bsd.cc -o flavor.o
+	$(CXX) $(CFLAGS) -c flavor-bsd.cc -o flavor.o
 
 socket.o: socket.cc socket.h
-	$(CXX) -c socket.cc
+	$(CXX) $(CFLAGS) -c socket.cc
 
 lonely.o: lonely.cc lonely.h
-	$(CXX) -c lonely.cc
+	$(CXX) $(CFLAGS) -c lonely.cc
 

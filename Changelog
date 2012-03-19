@@ -1,3 +1,9 @@
+0.93
+----
+
++ Added -flavor to remove #ifdef's
++ Added Android targets
+
 0.91
 ----
 + Thu Dec 15
