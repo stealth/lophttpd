@@ -60,7 +60,7 @@ typedef enum {
 
 // basic state struct needed for an httpd server
 struct http_state {
-	int peer_fd;
+	int fd, peer_fd;
 	status_t state;
 	time_t alive_time, header_time;
 	bool keep_alive;
@@ -73,12 +73,13 @@ struct http_state {
 	bool is_dev;
 
 	http_state()
-	 : peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
+	 : fd(-1), peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
 	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), from_ip(""), ct(0),
 	   is_dev(0) {};
 
 	void cleanup()
 	{
+		fd = -1;
 		peer_fd = -1;
 		copied = left = 0;
 		offset = 0;
