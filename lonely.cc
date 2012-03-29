@@ -432,14 +432,19 @@ int lonely_http::send_http_header()
 	http_header += "\r\nContent-Type: %s\r\n"
 	               "Content-Length: %zu\r\n\r\n";
 
-	char h_buf[http_header.size() + 128];
-	snprintf(h_buf, sizeof(h_buf), http_header.c_str(),
-	          misc::content_types[fd2state[cur_peer]->ct].c_type.c_str(), fd2state[cur_peer]->left);
-
-	size_t h_buf_len = strlen(h_buf);
-	if (writen(cur_peer, h_buf, h_buf_len) != (int)h_buf_len)
+	char *h_buf = new (nothrow) char[http_header.size() + 128];
+	if (!h_buf)
 		return -1;
 
+	int l = snprintf(h_buf, sizeof(h_buf), http_header.c_str(),
+	                 misc::content_types[fd2state[cur_peer]->ct].c_type.c_str(), fd2state[cur_peer]->left);
+
+	if (l <= 0 || writen(cur_peer, h_buf, l) != l) {
+		delete [] h_buf;
+		return -1;
+	}
+
+	delete [] h_buf;
 	return 0;
 }
 
@@ -467,8 +472,10 @@ int lonely_http::send_genindex()
 		return -1;
 	int buf_len = snprintf(buf, l, http_header.c_str(), idx.size(), idx.c_str());
 
-	if (buf_len < 0 || buf_len > (int)l)
+	if (buf_len < 0 || buf_len > (int)l) {
+		delete [] buf;
 		return -1;
+	}
 
 	int r = writen(cur_peer, buf, buf_len);
 

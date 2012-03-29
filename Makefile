@@ -2,7 +2,7 @@
 # This is the Makefile for the Linux flavor
 #
 
-CXX=c++ -Wall -O2
+CXX=c++ -Wall -O2 -ansi
 LD=c++
 
 all: lhttpd frontend

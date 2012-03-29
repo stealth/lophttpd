@@ -244,5 +244,5 @@ int writen(int fd, const void *buf, size_t len)
 	return o;
 }
 
-}; // namespace
+} // namespace
 

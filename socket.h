@@ -61,7 +61,7 @@ int readn(int fd, void *buf, size_t len);
 
 int writen(int fd, const void *buf, size_t len);
 
-}; // namespace
+} // namespace
 
 #endif // _MY_SOCKET_H_
 
