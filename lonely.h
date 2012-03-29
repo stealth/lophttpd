@@ -114,6 +114,9 @@ protected:
 	std::string err;
 	state_engine **fd2state;
 
+	bool heavy_load;
+
+
 	void cleanup(int);
 
 	void shutdown(int);
@@ -122,7 +125,7 @@ protected:
 
 public:
 	lonely()
-	 : first_fd(0), max_fd(0), cur_peer(-1), logger(NULL), cur_time(0), err(""), fd2state(NULL) {};
+	 : first_fd(0), max_fd(0), cur_peer(-1), logger(NULL), cur_time(0), err(""), fd2state(NULL), heavy_load(0) {};
 
 	virtual ~lonely() { delete [] pfds; delete logger; };
 

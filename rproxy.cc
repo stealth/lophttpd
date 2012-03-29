@@ -62,7 +62,6 @@ int rproxy::loop()
 	struct timeval tv;
 	sockaddr_in sin;
 	socklen_t slen = sizeof(sin);
-	bool heavy_load = 0;
 
 
 	for (;;) {

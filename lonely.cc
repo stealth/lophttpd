@@ -279,7 +279,6 @@ int lonely_http::loop()
 	struct tm tm;
 	struct timeval tv;
 	char from[128];
-	bool heavy_load = 0;
 
 
 	if (af == AF_INET6) {
@@ -743,6 +742,7 @@ int lonely_http::open()
 			file_cache[i] = fd;
 		// Too many open files? Drop caches
 		} else if (errno == EMFILE || errno == ENFILE) {
+			heavy_load = 1;
 			clear_cache();
 			fd = ::open(fd2state[cur_peer]->path.c_str(), O_RDONLY|O_NOCTTY);
 			if (fd >= 0)
