@@ -52,8 +52,6 @@ using namespace rproxy_config;
 using namespace ns_socket;
 using namespace std;
 
-const uint8_t rproxy::timeout_header = 3;
-
 
 int rproxy::loop()
 {
@@ -64,6 +62,8 @@ int rproxy::loop()
 	struct timeval tv;
 	sockaddr_in sin;
 	socklen_t slen = sizeof(sin);
+	bool heavy_load = 0;
+
 
 	for (;;) {
 		if (poll(pfds, max_fd + 1, 1000) < 0)
@@ -88,16 +88,12 @@ int rproxy::loop()
 
 			// timeout hanging connections (with pending data) but not accepting
 			// socket
-			if (cur_time - fd2state[i]->alive_time >= timeout_alive &&
+			if (cur_time - fd2state[i]->alive_time >= TIMEOUT_ALIVE &&
 			    fd2state[i]->state != STATE_ACCEPTING &&
 			    (fd2state[i]->blen > 0 || fd2state[i]->state == STATE_DECIDING)) {
-				cleanup(fd2state[i]->peer_fd);
-				cleanup(i);
-				continue;
-			}
 
-			if (fd2state[i]->state == STATE_CLOSING &&
-				cur_time - fd2state[i]->alive_time > timeout_closing) {
+				// always call fd and its peer in pairs: cleanup() + cleanup() or
+				// shutdown() + cleanup(). Otherwise re-used fd's can make troubles.
 				cleanup(fd2state[i]->peer_fd);
 				cleanup(i);
 				continue;
@@ -107,12 +103,9 @@ int rproxy::loop()
 				if (fd2state[i]->blen > 0) {
 					writen(fd2state[i]->peer_fd, fd2state[i]->buf, fd2state[i]->blen);
 					fd2state[i]->blen = 0;
-					shutdown(fd2state[i]->peer_fd);
-					shutdown(i);
-				} else {
-					cleanup(fd2state[i]->peer_fd);
-					cleanup(i);
 				}
+				shutdown(fd2state[i]->peer_fd);
+				cleanup(i);
 				continue;
 			}
 
@@ -125,9 +118,13 @@ int rproxy::loop()
 			if (fd2state[i]->state == STATE_ACCEPTING) {
 				pfds[i].revents = 0;
 				for (;;) {
+					heavy_load = 0;
 					afd = flavor::accept(i, (struct sockaddr *)&sin, &slen, flavor::NONBLOCK);
-					if (afd < 0)
+					if (afd < 0) {
+						if (errno == EMFILE || errno == ENFILE)
+							heavy_load = 1;
 						break;
+					}
 					nodelay(afd);
 					pfds[afd].fd = afd;
 					pfds[afd].events = POLLIN;
@@ -164,12 +161,8 @@ int rproxy::loop()
 						// actually data to send?
 						if ((n = fd2state[fd2state[i]->peer_fd]->blen) > 0) {
 							wn = writen(i, fd2state[fd2state[i]->peer_fd]->buf, n);
-							if (wn == 0) {
+							if (wn <= 0) {
 								shutdown(fd2state[i]->peer_fd);
-								shutdown(i);
-								continue;
-							} else if (wn < 0) {
-								cleanup(fd2state[i]->peer_fd);
 								cleanup(i);
 								continue;
 							}
@@ -208,6 +201,8 @@ int rproxy::loop()
 					// mangle_request_header() may return the same, already
 					// esablished, connection if the same URL is requested again
 					if (!same_conn) {
+						// exception with the cleanup()+cleanup() pair calling,
+						// however this one is OK, as the peer_fd is resetted by hand
 						cleanup(fd2state[i]->peer_fd);
 						fd2state[i]->peer_fd = peer_fd;
 					}
@@ -228,6 +223,7 @@ int rproxy::loop()
 
 					// only for new connections:
 					if (!same_conn) {
+						fd2state[peer_fd]->fd = peer_fd;
 						fd2state[peer_fd]->peer_fd = i;
 						fd2state[peer_fd]->state = STATE_CONNECTING;
 						fd2state[peer_fd]->type = HTTP_SERVER;
@@ -258,7 +254,6 @@ int rproxy::loop()
 				}
 				fd2state[i]->state = STATE_CONNECTED;
 				fd2state[i]->alive_time = cur_time;
-				pfds[i].fd = i;
 
 				// POLLOUT too, since mangle_request_header() already slurped data
 				// from client
@@ -276,12 +271,8 @@ int rproxy::loop()
 					// actually data to send?
 					if ((n = fd2state[fd2state[i]->peer_fd]->blen) > 0) {
 						wn = writen(i, fd2state[fd2state[i]->peer_fd]->buf, n);
-						if (wn == 0) {
+						if (wn <= 0) {
 							shutdown(fd2state[i]->peer_fd);
-							shutdown(i);
-							continue;
-						} else if (wn < 0) {
-							cleanup(fd2state[i]->peer_fd);
 							cleanup(i);
 							continue;
 						}
@@ -326,14 +317,10 @@ int rproxy::loop()
 							n = fd2state[i]->req_len;
 					}
 					r = read(i, fd2state[i]->buf, n);
-					if (r == 0) {
+					if (r <= 0) {
 						// no need to flush data here, as we won't be here
 						// with fd2state[i]->blen > 0
 						shutdown(fd2state[i]->peer_fd);
-						shutdown(i);
-						continue;
-					} else if (r < 0) {
-						cleanup(fd2state[i]->peer_fd);
 						cleanup(i);
 						continue;
 					}
@@ -352,22 +339,28 @@ int rproxy::loop()
 						r = mangle_server_reply();
 					}
 
-
 					// peer has data to write
 					pfds[fd2state[i]->peer_fd].events = POLLOUT|POLLIN;
 					pfds[i].events = POLLIN;
 				}
 
-				pfds[i].revents= 0;
+				pfds[i].revents = 0;
 				fd2state[i]->alive_time = cur_time;
 				fd2state[fd2state[i]->peer_fd]->alive_time = cur_time;
-			} else if (fd2state[i]->state == STATE_CLOSING) {
-				cleanup(fd2state[i]->peer_fd);
-				cleanup(i);
 			}
 
 		}
 		calc_max_fd();
+
+		for (map<int, time_t>::iterator it = shutdown_fds.begin(); it != shutdown_fds.end();) {
+			if (cur_time - it->second > TIMEOUT_CLOSING || heavy_load) {
+				int fd = it->first;
+				shutdown_fds.erase(it++);
+				cleanup(fd);
+			} else
+				++it;
+		}
+
 	}
 
 	return 0;
@@ -449,7 +442,7 @@ int rproxy::mangle_request_header()
 		fd2state[cur_peer]->header_time = cur_time;
 
 	if ((ptr = strstr(buf, "\r\n\r\n")) == NULL) {
-		if (cur_time - fd2state[cur_peer]->header_time > timeout_header) {
+		if (cur_time - fd2state[cur_peer]->header_time > TIMEOUT_HEADER) {
 			send_error(HTTP_ERROR_400);
 			return -1;
 		}

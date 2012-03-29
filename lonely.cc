@@ -176,8 +176,24 @@ void lonely<state_engine>::shutdown(int fd)
 	if (!fd2state[fd])
 		return;
 
+	// might be called twice or again after close() if peer has an issue
+	if (fd2state[fd]->state == STATE_CLOSING || fd2state[fd]->state == STATE_NONE)
+		return;
+
 	::shutdown(fd, SHUT_RDWR);
+	shutdown_fds[fd] = cur_time;
+
 	fd2state[fd]->state = STATE_CLOSING;
+	fd2state[fd]->blen = 0;
+
+	pfds[fd].fd = -1;
+	pfds[fd].events = pfds[fd].revents = 0;
+
+	// do not send peer_fd to -1, as send_error() in proxy calls shutdown()
+	// and we dont have any reference to peer anymore but need to call clenup()
+	// on the peer
+	if (max_fd == fd)
+		--max_fd;
 }
 
 
@@ -196,6 +212,10 @@ void lonely<state_engine>::cleanup(int fd)
 
 	if (max_fd == fd)
 		--max_fd;
+
+	map<int, time_t>::iterator it = shutdown_fds.find(fd);
+	if (it != shutdown_fds.end())
+		shutdown_fds.erase(it);
 }
 
 
@@ -234,7 +254,7 @@ void lonely<state_engine>::log(const string &msg)
 
 	string prefix = local_date;
 
-	if (fd2state[cur_peer]) {
+	if (cur_peer >= 0 && fd2state[cur_peer]) {
 		prefix += ": ";
 		prefix += fd2state[cur_peer]->from_ip;
 		prefix += ": ";
@@ -259,6 +279,8 @@ int lonely_http::loop()
 	struct tm tm;
 	struct timeval tv;
 	char from[128];
+	bool heavy_load = 0;
+
 
 	if (af == AF_INET6) {
 		slen = sizeof(sin6);
@@ -287,14 +309,7 @@ int lonely_http::loop()
 
 			// more than 30s no data?! But don't time out accept socket.
 			if (fd2state[i]->state != STATE_ACCEPTING &&
-			    cur_time - fd2state[i]->alive_time > timeout_alive) {
-				if (pfds[i].revents == 0) {
-					cleanup(i);
-					continue;
-				}
-			}
-			if (fd2state[i]->state == STATE_CLOSING &&
-			    cur_time - fd2state[i]->alive_time > timeout_closing) {
+			    cur_time - fd2state[i]->alive_time > TIMEOUT_ALIVE) {
 				cleanup(i);
 				continue;
 			}
@@ -320,10 +335,13 @@ int lonely_http::loop()
 
 				int afd = 0;
 				for (;;) {
+					heavy_load = 0;
 					afd = flavor::accept(i, saddr, &slen, flavor::NONBLOCK);
 					if (afd < 0) {
-						if (errno == EMFILE || errno == ENFILE)
+						if (errno == EMFILE || errno == ENFILE) {
+							heavy_load = 1;
 							clear_cache();
+						}
 						break;
 					}
 					pfds[afd].fd = afd;
@@ -362,9 +380,6 @@ int lonely_http::loop()
 					cleanup(i);
 					continue;
 				}
-			} else if (fd2state[i]->state == STATE_CLOSING) {
-				cleanup(i);
-				continue;
 			} else if (fd2state[i]->state == STATE_TRANSFERING) {
 				if (transfer() < 0) {
 					cleanup(i);
@@ -380,30 +395,26 @@ int lonely_http::loop()
 				pfds[i].events = POLLOUT;
 			} else if (fd2state[i]->state == STATE_CONNECTED)
 				pfds[i].events = POLLIN;
-
-			if (!fd2state[i]->keep_alive && fd2state[i]->state == STATE_CONNECTED) {
-				pfds[i].events = POLLIN;
+			if (!fd2state[i]->keep_alive && fd2state[i]->state == STATE_CONNECTED)
 				shutdown(i);
-			}
+
 			pfds[i].revents = 0;
 		}
 		calc_max_fd();
+
+		// we need to handle TIMEOUT_CLOSING cases in a different loop, as poll()
+		// will always renturn .revents = POLLHUP even if we ask for no events
+		for (map<int, time_t>::iterator it = shutdown_fds.begin(); it != shutdown_fds.end();) {
+			if (cur_time - it->second > TIMEOUT_CLOSING || heavy_load) {
+				int fd = it->first;
+				shutdown_fds.erase(it++);
+				cleanup(fd);
+			} else
+				++it;
+		}
 	}
 	return 0;
 }
-
-
-// In which timeframe complete header must arrive after 1st byte received
-const uint8_t lonely_http::timeout_header = 3;
-
-// timeout between shutdown() and close()
-template<typename state_engine>
-const uint8_t lonely<state_engine>::timeout_closing = 3;
-
-// In which timeframe a new request must arrive after connect/transfer
-template<typename state_engine>
-const uint8_t lonely<state_engine>::timeout_alive = 30;
-
 
 
 int lonely_http::send_http_header()
@@ -426,7 +437,8 @@ int lonely_http::send_http_header()
 	snprintf(h_buf, sizeof(h_buf), http_header.c_str(),
 	          misc::content_types[fd2state[cur_peer]->ct].c_type.c_str(), fd2state[cur_peer]->left);
 
-	if (writen(cur_peer, h_buf, strlen(h_buf)) <= 0)
+	size_t h_buf_len = strlen(h_buf);
+	if (writen(cur_peer, h_buf, h_buf_len) != (int)h_buf_len)
 		return -1;
 
 	return 0;
@@ -451,14 +463,19 @@ int lonely_http::send_genindex()
 
 
 	size_t l = http_header.size() + 128 + idx.size();
-	char *h_buf = new (nothrow) char[l];
-	if (!h_buf)
+	char *buf = new (nothrow) char[l];
+	if (!buf)
 		return -1;
-	snprintf(h_buf, l, http_header.c_str(), idx.size(), idx.c_str());
-	int r = writen(cur_peer, h_buf, strlen(h_buf));
-	delete [] h_buf;
+	int buf_len = snprintf(buf, l, http_header.c_str(), idx.size(), idx.c_str());
 
-	if (r <= 0)
+	if (buf_len < 0 || buf_len > (int)l)
+		return -1;
+
+	int r = writen(cur_peer, buf, buf_len);
+
+	delete [] buf;
+
+	if (r != buf_len)
 		return -1;
 
 	return r;
@@ -561,7 +578,7 @@ int lonely_http::HEAD()
 	head += misc::content_types[fd2state[cur_peer]->ct].c_type;
 	head += "\r\nServer: lophttpd\r\nConnection: keep-alive\r\n\r\n";
 
-	if (writen(cur_peer, head.c_str(), head.size()) <= 0)
+	if (writen(cur_peer, head.c_str(), head.size()) != (int)head.size())
 		return -1;
 	return 0;
 }
@@ -573,7 +590,7 @@ int lonely_http::OPTIONS()
 	reply += gmt_date;
 	reply += "\r\nServer: lophttpd\r\nContent-Length: 0\r\nAllow: OPTIONS, GET, HEAD, POST\r\n\r\n";
 	log("OPTIONS\n");
-	if (writen(cur_peer, reply.c_str(), reply.size()) <= 0)
+	if (writen(cur_peer, reply.c_str(), reply.size()) != (int)reply.size())
 		return -1;
 	return 0;
 }
@@ -813,7 +830,7 @@ int lonely_http::GETPOST()
 			if (send_genindex() < 0)
 				return -1;
 		} else {
-			// index.html exists? send!
+			// No generated index. Maybe index.html itself?
 			fd2state[cur_peer]->path += "/index.html";
 			if (stat() == 0 && (S_ISREG(cur_stat.st_mode))) {
 				fd2state[cur_peer]->offset = 0;
@@ -883,7 +900,7 @@ int lonely_http::handle_request()
 
 	// incomplete header?
 	if ((ptr = strstr(req_buf, "\r\n\r\n")) == NULL) {
-		if (cur_time - fd2state[cur_peer]->header_time > timeout_header) {
+		if (cur_time - fd2state[cur_peer]->header_time > TIMEOUT_HEADER) {
 			return send_error(HTTP_ERROR_400);
 		}
 		fd2state[cur_peer]->keep_alive = 1;
@@ -981,6 +998,11 @@ int lonely_http::handle_request()
 	if (end_ptr >= last_byte)
 		return send_error(HTTP_ERROR_400);
 	end_ptr[1] = 0;
+
+	// remove trailing / if not just a single slash, to avoid
+	// indexgen lookups of /gif vs. /gif/ etc.
+	if (end_ptr - ptr > 1 && *end_ptr == '/')
+		*end_ptr = 0;
 
 	fd2state[cur_peer]->path = ptr;
 

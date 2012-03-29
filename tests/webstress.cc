@@ -201,7 +201,7 @@ int webstress::loop()
 	         host.c_str());
 	size_t GET_len = strlen(GET);
 
-	int sock = 0;
+	int sock = 0, one = 1;
 	for (;;) {
 		now = time(NULL);
 		while (peers + 10 < max_cl) {
@@ -211,11 +211,13 @@ int webstress::loop()
 				return -1;
 			}
 			fcntl(sock, F_SETFL, O_RDWR|O_NONBLOCK);
+			setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
 			if (connect(sock, ai->ai_addr, ai->ai_addrlen) < 0 &&
 			    errno != EINPROGRESS) {
-				err = "webstress::loop::";
+				err = "webstress::loop::connect:";
 				err += strerror(errno);
-				return -1;
+				printf("%s\n", err.c_str());
+				break;
 			}
 			client *c = new client;
 			memset(c, 0, sizeof(client));

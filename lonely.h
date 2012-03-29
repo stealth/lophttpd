@@ -60,7 +60,7 @@ typedef enum {
 
 // basic state struct needed for an httpd server
 struct http_state {
-	int fd, peer_fd;
+	int fd;
 	status_t state;
 	time_t alive_time, header_time;
 	bool keep_alive;
@@ -71,16 +71,17 @@ struct http_state {
 	std::string path, from_ip;
 	int ct;
 	bool is_dev;
+	size_t blen;
 
 	http_state()
-	 : fd(-1), peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
+	 : fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
 	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), from_ip(""), ct(0),
-	   is_dev(0) {};
+	   is_dev(0), blen(0) {};
 
+	// might be called twice, so no double-free's
 	void cleanup()
 	{
 		fd = -1;
-		peer_fd = -1;
 		copied = left = 0;
 		offset = 0;
 		keep_alive = 0;
@@ -90,6 +91,7 @@ struct http_state {
 		is_dev = 0;
 		state = STATE_NONE;
 		path.clear(); from_ip.clear();
+		blen = 0;
 	}
 };
 
@@ -103,14 +105,14 @@ protected:
 	int af;
 	log_provider *logger;
 
+	std::map<int, time_t> shutdown_fds;
+
 	time_t cur_time;
 
 	char gmt_date[64], local_date[64];
 
 	std::string err;
 	state_engine **fd2state;
-
-	static const uint8_t timeout_alive, timeout_closing;
 
 	void cleanup(int);
 
@@ -165,12 +167,21 @@ typedef enum {
 } http_request_t;
 
 
+enum {
+	TIMEOUT_ALIVE = 30,
+	TIMEOUT_CLOSING = 5,
+	TIMEOUT_HEADER = 3
+};
+
+
 struct inode {
 	dev_t dev;
 	ino_t ino;
 };
 
+
 extern std::string http_error_msgs[];
+
 
 class lonely_http : public lonely<http_state> {
 private:
@@ -187,8 +198,6 @@ private:
 
 	// pathname to (stat, content-type)
 	std::map<std::string, std::pair<struct stat, int> > stat_cache;
-
-	static const uint8_t timeout_header;
 
 	int OPTIONS();
 
