@@ -66,7 +66,7 @@ struct rproxy_state {
 	off_t offset;
 	struct rproxy_config::backend node;
 	std::string opath, from_ip;
-	char buf[4096];
+	char buf[1024];
 	size_t blen, req_len;
 
 	http_instance_t type;

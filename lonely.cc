@@ -189,7 +189,7 @@ void lonely<state_engine>::shutdown(int fd)
 	pfds[fd].fd = -1;
 	pfds[fd].events = pfds[fd].revents = 0;
 
-	// do not send peer_fd to -1, as send_error() in proxy calls shutdown()
+	// do not set peer_fd to -1, as send_error() in proxy calls shutdown()
 	// and we dont have any reference to peer anymore but need to call clenup()
 	// on the peer
 	if (max_fd == fd)
