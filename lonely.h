@@ -108,12 +108,10 @@ protected:
 	std::map<int, time_t> shutdown_fds;
 
 	time_t cur_time;
-
 	char gmt_date[64], local_date[64];
 
 	std::string err;
 	state_engine **fd2state;
-
 	bool heavy_load;
 
 
@@ -193,14 +191,16 @@ private:
 	size_t cur_end_range;
 	bool cur_range_requested;
 	http_request_t cur_request;
+	char hbuf[1024];		// header construction scratch store
 
 	size_t mss;
-
 
 	std::map<inode, int> file_cache;
 
 	// pathname to (stat, content-type)
 	std::map<std::string, std::pair<struct stat, int> > stat_cache;
+
+	static const std::string hdr_format;
 
 	int OPTIONS();
 

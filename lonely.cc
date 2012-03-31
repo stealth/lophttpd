@@ -79,6 +79,13 @@ string http_error_msgs[] = {
 	"503 Service Unavailable"
 };
 
+const string lonely_http::hdr_format =
+	"HTTP/1.1 200 OK\r\n"
+	"Server: lophttpd\r\n"
+	"Date: %s\r\n"
+	"Content-Length: %zu\r\n"
+	"Content-Type: %s\r\n\r\n";
+
 
 bool operator<(const inode &i1, const inode &i2)
 {
@@ -418,36 +425,30 @@ int lonely_http::loop()
 
 int lonely_http::send_http_header()
 {
-	string http_header;
+	int l = 0;
 
 	if (cur_range_requested) {
-		http_header = "HTTP/1.1 206 Partial Content\r\nServer: lophttpd\r\n";
-		char range[256];
-		snprintf(range, sizeof(range), "Content-Range: bytes %zu-%zu/%zu\r\nDate: ",
-		         cur_start_range, cur_end_range - 1, cur_stat.st_size);
-		http_header += range;
-	} else
-		http_header = "HTTP/1.1 200 OK\r\nServer: lophttpd\r\nDate: ";
-	http_header += gmt_date;
-	http_header += "\r\nContent-Type: %s\r\n"
-	               "Content-Length: %zu\r\n\r\n";
-
-	size_t l = http_header.size() + 128;
-	char *buf = new (nothrow) char[l];
-	if (!buf)
-		return -1;
-	int buf_len = snprintf(buf, l, http_header.c_str(),
-	                       misc::content_types[fd2state[cur_peer]->ct].c_type.c_str(), fd2state[cur_peer]->left);
-	if (buf_len < 0 || buf_len > (int)l) {
-		delete [] buf;
-		return -1;
+		l = snprintf(hbuf, sizeof(hbuf),
+		         "HTTP/1.1 206 Partial Content\r\n"
+		         "Server: lophttpd\r\n"
+		         "Content-Range: bytes %zu-%zu/%zu\r\n"
+		         "Date: %s\r\n"
+		         "Content-Type: %s\r\n"
+		         "Content-Length: %zu\r\n\r\n",
+		         cur_start_range, cur_end_range - 1, cur_stat.st_size, gmt_date,
+		         misc::content_types[fd2state[cur_peer]->ct].c_type.c_str(),
+		         fd2state[cur_peer]->left);
+	} else {
+		l = snprintf(hbuf, sizeof(hbuf), hdr_format.c_str(),
+	                     gmt_date, fd2state[cur_peer]->left, misc::content_types[fd2state[cur_peer]->ct].c_type.c_str());
 	}
 
-	int r = writen(cur_peer, buf, buf_len);
+	if (l < 0 || l > (int)sizeof(hbuf))
+		return -1;
 
-	delete [] buf;
+	int r = writen(cur_peer, hbuf, l);
 
-	if (r != buf_len)
+	if (r != l)
 		return -1;
 
 	return r;
@@ -463,29 +464,18 @@ int lonely_http::send_genindex()
 	if (i != misc::dir2index.end())
 		idx = i->second;
 
-	string http_header = "HTTP/1.1 200 OK\r\n"
-	                     "Server: lophttpd\r\n"
-	                     "Date: ";
-	http_header += gmt_date;
-	http_header += "\r\nContent-Length: %zu\r\n"
-                       "Content-Type: text/html\r\n\r\n%s";
-
-	size_t l = http_header.size() + 128 + idx.size();
-	char *buf = new (nothrow) char[l];
-	if (!buf)
+	int l = snprintf(hbuf, sizeof(hbuf), hdr_format.c_str(), gmt_date, idx.size(), "text/html");
+	if (l < 0 || l > (int)sizeof(hbuf))
 		return -1;
-	int buf_len = snprintf(buf, l, http_header.c_str(), idx.size(), idx.c_str());
 
-	if (buf_len < 0 || buf_len > (int)l) {
-		delete [] buf;
+	int r = writen(cur_peer, hbuf, l);
+
+	if (r != l)
 		return -1;
-	}
 
-	int r = writen(cur_peer, buf, buf_len);
+	r = writen(cur_peer, idx.c_str(), idx.size());
 
-	delete [] buf;
-
-	if (r != buf_len)
+	if (r != (int)idx.size())
 		return -1;
 
 	return r;
@@ -882,8 +872,10 @@ int lonely_http::send_error(http_error_code_t e)
 	http_header += "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 	fd2state[cur_peer]->keep_alive = 0;
 
-	if (writen(cur_peer, http_header.c_str(), http_header.size()) <= 0)
+	if (writen(cur_peer, http_header.c_str(), http_header.size()) <= 0) {
+		shutdown(cur_peer);
 		return -1;
+	}
 
 	shutdown(cur_peer);
 	return 0;
