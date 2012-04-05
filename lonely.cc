@@ -565,7 +565,7 @@ int lonely_http::HEAD()
 		} else {
 			cl = cur_stat.st_size;
 			// No Range: for HTML
-			if (fd2state[cur_peer]->ct == 1)
+			if (fd2state[cur_peer]->ct == misc::CONTENT_HTML)
 				head += "Accept-Ranges: none\r\nDate: ";
 			else
 				head += "Accept-Ranges: bytes\r\nDate: ";

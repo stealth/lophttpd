@@ -51,7 +51,7 @@ class webstress {
 public:
 	webstress(const string &h, const string &p, const string &f, bool seq = 0)
 		: host(h), port(p), path(f), err(""), sequential(seq), max_cl(1024),
-		  peers(0), ever(0), ests(0), success(0), hdr_fail(0), write_fail(0), read_fail(0), 
+		  peers(0), ever(0), ests(0), success(0), hdr_fail(0), write_fail(0), read_fail(0),
 	          to_fail(0), hup_fail(0), max_fd(0), pfds(NULL)
 	{
 	}
