@@ -79,12 +79,27 @@ string http_error_msgs[] = {
 	"503 Service Unavailable"
 };
 
-const string lonely_http::hdr_format =
+const string lonely_http::hdr_fmt =
 	"HTTP/1.1 200 OK\r\n"
 	"Server: lophttpd\r\n"
 	"Date: %s\r\n"
 	"Content-Length: %zu\r\n"
 	"Content-Type: %s\r\n\r\n";
+
+const string lonely_http::chunked_hdr_fmt =
+	"HTTP/1.1 200 OK\r\n"
+	"Server: lophttpd\r\n"
+	"Date: %s\r\n"
+	"Transfer-Encoding: chunked\r\n"
+	"Content-Type: %s\r\n\r\n";
+
+const string lonely_http::part_hdr_fmt =
+	"HTTP/1.1 206 Partial Content\r\n"
+	"Server: lophttpd\r\n"
+	"Date: %s\r\n"
+	"Content-Length: %zu\r\n"
+	"Content-Type: %s\r\n"
+	"Content-Range: bytes %zu-%zu/%zu\r\n\r\n";
 
 
 bool operator<(const inode &i1, const inode &i2)
@@ -427,19 +442,17 @@ int lonely_http::send_http_header()
 {
 	int l = 0;
 
+	// partial content
 	if (cur_range_requested) {
-		l = snprintf(hbuf, sizeof(hbuf),
-		         "HTTP/1.1 206 Partial Content\r\n"
-		         "Server: lophttpd\r\n"
-		         "Content-Range: bytes %zu-%zu/%zu\r\n"
-		         "Date: %s\r\n"
-		         "Content-Type: %s\r\n"
-		         "Content-Length: %zu\r\n\r\n",
-		         cur_start_range, cur_end_range - 1, cur_stat.st_size, gmt_date,
-		         misc::content_types[fd2state[cur_peer]->ct].c_type.c_str(),
-		         fd2state[cur_peer]->left);
+		l = snprintf(hbuf, sizeof(hbuf), part_hdr_fmt.c_str(),
+	                     gmt_date, fd2state[cur_peer]->left, misc::content_types[fd2state[cur_peer]->ct].c_type.c_str(),
+			     cur_start_range, cur_end_range - 1, cur_stat.st_size);
+	// special regular file (proc)
+	} else if (cur_stat.st_size == 0) {
+		l = snprintf(hbuf, sizeof(hbuf), chunked_hdr_fmt.c_str(),
+		             gmt_date, "text/plain");
 	} else {
-		l = snprintf(hbuf, sizeof(hbuf), hdr_format.c_str(),
+		l = snprintf(hbuf, sizeof(hbuf), hdr_fmt.c_str(),
 	                     gmt_date, fd2state[cur_peer]->left, misc::content_types[fd2state[cur_peer]->ct].c_type.c_str());
 	}
 
@@ -464,7 +477,7 @@ int lonely_http::send_genindex()
 	if (i != misc::dir2index.end())
 		idx = i->second;
 
-	int l = snprintf(hbuf, sizeof(hbuf), hdr_format.c_str(), gmt_date, idx.size(), "text/html");
+	int l = snprintf(hbuf, sizeof(hbuf), hdr_fmt.c_str(), gmt_date, idx.size(), "text/html");
 	if (l < 0 || l > (int)sizeof(hbuf))
 		return -1;
 
@@ -699,6 +712,12 @@ int lonely_http::stat()
 	if (r == 0) {
 		if (!flavor::servable_file(cur_stat))
 			return -1;
+
+		// workaround for /sys files which are always reported 4096 byte in size
+		// but contain less and have 0 blocks
+		if (S_ISREG(cur_stat.st_mode) && cur_stat.st_blocks == 0)
+			cur_stat.st_size = 0;
+
 		// special case for blockdevices; if not already fetched size,
 		// put it into cur_stat
 		if (flavor::servable_device(cur_stat)) {
@@ -810,11 +829,14 @@ int lonely_http::GETPOST()
 	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode) || flavor::servable_device(cur_stat))) {
 		if (cur_end_range == 0)
 			cur_end_range = cur_stat.st_size;
-		if (cur_start_range < 0 ||
-		    cur_start_range >= cur_stat.st_size ||
-		    cur_end_range > (size_t)cur_stat.st_size ||
-		    (size_t)cur_start_range >= cur_end_range) {
-			return send_error(HTTP_ERROR_416);
+
+		if (cur_range_requested) {
+			if (cur_start_range < 0 ||
+			    cur_start_range >= cur_stat.st_size ||
+			    cur_end_range > (size_t)cur_stat.st_size ||
+			    (size_t)cur_start_range >= cur_end_range) {
+				return send_error(HTTP_ERROR_416);
+			}
 		}
 
 		fd2state[cur_peer]->offset = cur_start_range;

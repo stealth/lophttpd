@@ -7,6 +7,9 @@ connections at the same time. The ammount of connections is only limited by the
 OS's maximum number of open files per process and by your CPU/network
 speed.
 
+lophttpd can easily serve 10,000+ clients simulteanously and just
+using 70% CPU on an average sized machine (tested on a core i5).
+
 Scheduling of connections is done in user-space by lophttpd. It uses
 sendfile(2) call and caching to get its good download performance.
 
@@ -134,6 +137,10 @@ lophttpd also serves block device files. You need to run it as
 root (-u root) or as the user who can open the block dev files. This
 is not really for production use, (keep the security implications in mind
 if running as root) but its sometimes useful on embedded devices.
+
+As well as device files, lophttpd can serve /proc or /sys file systems.
+!!! Be aware about the security consequences and that you sometimes will
+get wrong resuls (proc/<pid> dirs come and go) !!!
 
 If you have ideas and or offer performance/testing environment please
 drop me an email: sebastian.krahmer [at] gmail [dot] com :-)

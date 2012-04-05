@@ -34,15 +34,20 @@
 #include <string>
 #include <fcntl.h>
 #include <errno.h>
+#include <cstdio>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <sys/disk.h>
 #include <sys/ioctl.h>
+
+#include "socket.h"
 #include "flavor.h"
 
 
 namespace flavor {
+
+using namespace ns_socket;
 
 int accept(int fd, struct sockaddr *saddr, socklen_t *slen, int flags)
 {
@@ -91,7 +96,24 @@ int device_size(const std::string &path, size_t &size)
 int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, bool is_device)
 {
 	off_t sbytes = 0;
-	ssize_t r = 0;
+	ssize_t r = 0, l = 0;
+
+	// proc files
+	if (left == 0 && copied == 0) {
+		char buf[10000], siz[32];
+		r = pread(fd, buf, sizeof(buf), *offset);
+		l = snprintf(siz, sizeof(siz), "%x\r\n", (int)r);
+		if (writen(peer, siz, l) != l)
+			return -1;
+		if (writen(peer, buf, r) != r)
+			return -1;
+		if (writen(peer, "\r\n0\r\n\r\n", 7) != 7)
+			return -1;
+		left = 0;
+		copied = r;
+		return 0;
+	}
+
 
 	if (!is_device) {
 		r = ::sendfile(fd, peer, *offset, n, NULL, &sbytes, 0);

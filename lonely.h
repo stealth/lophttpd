@@ -200,7 +200,7 @@ private:
 	// pathname to (stat, content-type)
 	std::map<std::string, std::pair<struct stat, int> > stat_cache;
 
-	static const std::string hdr_format;
+	static const std::string hdr_fmt, chunked_hdr_fmt, part_hdr_fmt;
 
 	int OPTIONS();
 
