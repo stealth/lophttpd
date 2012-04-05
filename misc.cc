@@ -33,6 +33,7 @@
 #include <string>
 #include <cstring>
 #include <cstdlib>
+#include <cerrno>
 #include <cstdio>
 #include <time.h>
 #include <unistd.h>
@@ -368,7 +369,10 @@ void generate_index(const string &path)
 				flags |= O_TRUNC;
 			int fd = open(path.c_str(), flags, 0644);
 			if (fd < 0) {
-				++i;
+				if (errno == EEXIST)
+					dir2index.erase(i++);
+				else
+					++i;
 				continue;
 			}
 			write(fd, i->second.c_str(), i->second.size());
