@@ -149,6 +149,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 	char pathname[strlen(fpath) + 1];
 	snprintf(pathname, sizeof(pathname), "%s", fpath);
 	char *basename = strrchr(pathname, '/'), *parent = NULL;
+	char spaces[40];
 
 	if (!basename)
 		return 0;
@@ -166,6 +167,13 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		parent = pathname;
 	}
 
+	memset(spaces, ' ', sizeof(spaces) - 1);
+	spaces[sizeof(spaces) - 1] = 0;
+
+	char *mod_time = ctime((const time_t *)&st->st_mtime), *nl = NULL;
+	if ((nl = strchr(mod_time, '\n')) != NULL)
+		*nl = 0;
+
 	if (typeflag & FTW_D) {
 		string html = "<html><head>\n";
 		if (httpd_config::base.size() > 0) {
@@ -178,11 +186,9 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += "</title>\n";
 		html += "</head>\n<body><h1>Index of ";
 		html += fpath;
-		html += "</h1>";
-		html += "<table border=1><thead><tr><th></th><th>Name</th><th>Last modified</th><th>Size</th>"
-		        "<th>Content</th></tr>";
-		html += "<th><img src=\"icons/back.png\" alt=\"[DIR]\"></th>";
-		html += "<th><a href=\"";
+		html += "</h1><pre>";
+		html += "Name                                           Last modified               Size    Content\n<hr>\n";
+		html += "[DIR ] <a href=\"";
 
 		// If / is the parent, we need to use the base URL, since
 		// otherwise it would be "/", which is not relative and wont
@@ -192,7 +198,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 			html += httpd_config::base;
 		else
 			html += parent + 1;
-		html += "\">Parent Directory</a></th></tr></thead>";
+		html += "\">Parent Directory</a>\n\n";
 
 		if (dir2index.find(fpath) == dir2index.end())
 			dir2index[fpath] = html;
@@ -202,14 +208,20 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		if (!*basename)
 			return 0;
 
-		html += "<tr><th><img src=\"icons/folder.png\" alt=\"[DIR]\"></th>";
-		html += "<th><a href=\"";
+		html += "[DIR ]";
+		html += " <a href=\"";
 		html += fpath + 1;
 		html += "\">";
 		html += basename;
-		html += "</th><th>";
-		html += ctime((const time_t *)&st->st_mtime);
-		html += "</th><th> </th><th>(directory)</th></tr>";
+		html += "</a>";
+		if (strlen(basename) < sizeof(spaces))
+			html += string(spaces, sizeof(spaces) - strlen(basename));
+		else
+			html += "  ";
+
+		html += mod_time;
+		html += string(spaces, 12);	// size
+		html += "(directory)\n";
 
 		dir2index[parent] = html;
 	} else if (typeflag & FTW_L) {
@@ -221,24 +233,32 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		if (!realpath(lnk, rlnk))
 			return -1;
 		string &html = dir2index[parent];
-		html += "<tr><th><img src=\"icons/file.gif\" alt=\"[LINK]\"></th>";
-		html += "<th><a href=\"";
+		html += "[FILE]";
+		html += " <a href=\"";
 		html += rlnk + 1;
 		html += "\">";
 		html += basename;
-		html += "</th><th>";
-		html += ctime((const time_t *)&st->st_mtime);
-		html += "</th><th> </th><th>(symlink)</th></tr>";
+		html += "</a>";
+		if (strlen(basename) < sizeof(spaces))
+			html += string(spaces, sizeof(spaces) - strlen(basename));
+		else
+			html += "  ";
+		html += mod_time;
+		html += string(spaces, 12);	// size
+		html += "(symlink)\n";
 	} else {
 		string &html = dir2index[parent];
-		html += "<tr><th><img src=\"icons/file.gif\" alt=\"[FILE]\"></th>";
-		html += "<th><a href=\"";
+		html += "[FILE]";
+		html += " <a href=\"";
 		html += fpath + 1;
 		html += "\">";
 		html += basename;
-		html += "</th><th>";
-		html += ctime((const time_t *)&st->st_mtime);
-		html += "</th><th>";
+		html += "</a>";
+		if (strlen(basename) < sizeof(spaces))
+			html += string(spaces, sizeof(spaces) - strlen(basename));
+		else
+			html += "  ";
+		html += mod_time;
 		char sbuf[128];
 		// st is const
 		size_t size = (size_t)st->st_size;
@@ -246,19 +266,18 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 			flavor::device_size(fpath, size);
 		}
 		if (size > 1024*1024*1024)
-			sprintf(sbuf, "%.2f GB", ((double)size)/(1024*1024*1024));
+			sprintf(sbuf, "%8.2fGB  ", ((double)size)/(1024*1024*1024));
 		else if (size > 1024*1024)
-			sprintf(sbuf, "%.2f MB", ((double)size)/(1024*1024));
+			sprintf(sbuf, "%8.2fMB  ", ((double)size)/(1024*1024));
 		else if (size > 1024)
-			sprintf(sbuf, "%.2f KB", ((double)size)/1024);
+			sprintf(sbuf, "%8.2fKB  ", ((double)size)/1024);
 		else
-			sprintf(sbuf, "%zd B", size);
+			sprintf(sbuf, "%8zdB   ", size);
 
 		html += sbuf;
-		html += "</th><th>";
 		int i = find_ctype(basename);
 		html += content_types[i].c_type;
-		html += "</th></tr>";
+		html += "\n";
 	}
 	return 0;
 }
@@ -327,7 +346,7 @@ void generate_index(const string &path)
 
 	for (i = dir2index.begin(); i != dir2index.end();) {
 		string &html = i->second;
-		html += "</table><p id=\"bottom\"><a href=\"http://github.com/stealth/lophttpd\">lophttpd powered</a></p></body></html>";
+		html += "</pre><hr><p id=\"bottom\"><a href=\"http://github.com/stealth/lophttpd\">lophttpd powered</a></p></body></html>";
 
 		// in quiet mode, dont drop index.html files
 		if (httpd_config::quiet) {
