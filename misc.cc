@@ -187,7 +187,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += "</head>\n<body><h1>Index of ";
 		html += fpath;
 		html += "</h1><pre>";
-		html += "Name                                           Last modified               Size    Content\n<hr>\n";
+		html += "Name                                           Last modified                Size    Content\n<hr>\n";
 		html += "[DIR ] <a href=\"";
 
 		// If / is the parent, we need to use the base URL, since
@@ -220,7 +220,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 			html += "  ";
 
 		html += mod_time;
-		html += string(spaces, 12);	// size
+		html += string(spaces, 13);	// size
 		html += "(directory)\n";
 
 		dir2index[parent] = html;
@@ -244,7 +244,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		else
 			html += "  ";
 		html += mod_time;
-		html += string(spaces, 12);	// size
+		html += string(spaces, 13);	// size
 		html += "(symlink)\n";
 	} else {
 		string &html = dir2index[parent];
@@ -266,13 +266,13 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 			flavor::device_size(fpath, size);
 		}
 		if (size > 1024*1024*1024)
-			sprintf(sbuf, "%8.2fGB  ", ((double)size)/(1024*1024*1024));
+			sprintf(sbuf, " %8.2fGB  ", ((double)size)/(1024*1024*1024));
 		else if (size > 1024*1024)
-			sprintf(sbuf, "%8.2fMB  ", ((double)size)/(1024*1024));
+			sprintf(sbuf, " %8.2fMB  ", ((double)size)/(1024*1024));
 		else if (size > 1024)
-			sprintf(sbuf, "%8.2fKB  ", ((double)size)/1024);
+			sprintf(sbuf, " %8.2fKB  ", ((double)size)/1024);
 		else
-			sprintf(sbuf, "%8zdB   ", size);
+			sprintf(sbuf, " %8zdB   ", size);
 
 		html += sbuf;
 		int i = find_ctype(basename);
