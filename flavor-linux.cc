@@ -110,7 +110,7 @@ int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &co
 	// Linux can, unlike BSD, use sendfile() on device files, so
 	// the last parameter is ignored
 
-	if ((r = ::sendfile(peer, fd, offset, n)) < 0)
+	if ((r = ::sendfile(peer, fd, offset, n)) <= 0)
 		return -1;
 	left -= r;
 	copied += r;

@@ -51,7 +51,8 @@ typedef enum {
 	STATE_ACCEPTING,
 	STATE_DECIDING,
 	STATE_CONNECTED,
-	STATE_TRANSFERING,
+	STATE_DOWNLOADING,
+	STATE_UPLOADING,
 	STATE_CLOSING,
 	STATE_NONE,
 	STATE_ERROR
@@ -108,6 +109,7 @@ protected:
 	std::map<int, time_t> shutdown_fds;
 
 	time_t cur_time;
+	suseconds_t cur_usec;
 	char gmt_date[64], local_date[64];
 
 	std::string err;
@@ -123,7 +125,8 @@ protected:
 
 public:
 	lonely()
-	 : first_fd(0), max_fd(0), cur_peer(-1), logger(NULL), cur_time(0), err(""), fd2state(NULL), heavy_load(0) {};
+	 : first_fd(0), max_fd(0), cur_peer(-1), logger(NULL), cur_time(0), cur_usec(0),
+	   err(""), fd2state(NULL), heavy_load(0) {};
 
 	virtual ~lonely() { delete [] pfds; delete logger; };
 
@@ -200,7 +203,7 @@ private:
 	// pathname to (stat, content-type)
 	std::map<std::string, std::pair<struct stat, int> > stat_cache;
 
-	static const std::string hdr_fmt, chunked_hdr_fmt, part_hdr_fmt;
+	static const std::string hdr_fmt, chunked_hdr_fmt, part_hdr_fmt, put_hdr_fmt;
 
 	int OPTIONS();
 
@@ -232,7 +235,9 @@ private:
 
 	int handle_request();
 
-	int transfer();
+	int download();
+
+	int upload();
 
 public:
 	bool vhosts;

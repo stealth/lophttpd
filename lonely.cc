@@ -42,6 +42,7 @@
 #include <csignal>
 #include <limits.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -101,6 +102,12 @@ const string lonely_http::part_hdr_fmt =
 	"Content-Type: %s\r\n"
 	"Content-Range: bytes %zu-%zu/%zu\r\n\r\n";
 
+const string lonely_http::put_hdr_fmt =
+	"HTTP/1.1 201 Created\r\n"
+	"Server: lophttpd\r\n"
+	"Date: %s\r\n"
+	"Content-Length: %zu\r\n"
+	"Content-Type: text/html\r\n\r\n";
 
 bool operator<(const inode &i1, const inode &i2)
 {
@@ -118,7 +125,11 @@ const char *lonely<state_engine>::why()
 template<typename state_engine>
 int lonely<state_engine>::init(const string &host, const string &port, int a)
 {
-	cur_time = time(NULL);
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+	cur_time = tv.tv_sec;
+	cur_usec = tv.tv_usec;
 
 	af = a;
 
@@ -317,6 +328,8 @@ int lonely_http::loop()
 		memset(&tm, 0, sizeof(tm));
 		gettimeofday(&tv, NULL);
 		cur_time = tv.tv_sec;
+		cur_usec = tv.tv_usec;
+
 		localtime_r(&cur_time, &tm);
 		strftime(local_date, sizeof(local_date), "%a, %d %b %Y %H:%M:%S GMT%z", &tm);
 		gmtime_r(&cur_time, &tm);
@@ -401,21 +414,28 @@ int lonely_http::loop()
 					cleanup(i);
 					continue;
 				}
-			} else if (fd2state[i]->state == STATE_TRANSFERING) {
-				if (transfer() < 0) {
+			} else if (fd2state[i]->state == STATE_DOWNLOADING) {
+				if (download() < 0) {
+					cleanup(i);
+					continue;
+				}
+			} else if (fd2state[i]->state == STATE_UPLOADING) {
+				if (upload() < 0) {
 					cleanup(i);
 					continue;
 				}
 			}
 
 			// do not glue together the above and below if()'s because
-			// transfer() may change state so we need a 2nd state-engine walk
+			// download() may change state so we need a 2nd state-engine walk
 
-			// In case of TRANSFERING we have data to send, so POLLOUT.
-			if (fd2state[i]->state == STATE_TRANSFERING) {
+			if (fd2state[i]->state == STATE_DOWNLOADING) {
 				pfds[i].events = POLLOUT;
+			} else if (fd2state[i]->state == STATE_UPLOADING) {
+				pfds[i].events = POLLIN;
 			} else if (fd2state[i]->state == STATE_CONNECTED)
 				pfds[i].events = POLLIN;
+
 			if (!fd2state[i]->keep_alive && fd2state[i]->state == STATE_CONNECTED)
 				shutdown(i);
 
@@ -495,15 +515,15 @@ int lonely_http::send_genindex()
 }
 
 
-int lonely_http::transfer()
+int lonely_http::download()
 {
 	int r = 0, fd = open();
 	if (fd < 0) {
-		// callers of transfer() must not send_error() themself on -1,
+		// callers of download() must not send_error() themself on -1,
 		// as they cannot know whether a failure appeared before or after
-		// send_header() call. Thus transfer() sends its erros themself.
+		// send_header() call. Thus download() sends its erros themself.
 		send_error(HTTP_ERROR_500);
-		err = "lonely_http::transfer::open:";
+		err = "lonely_http::download::open:";
 		err += strerror(errno);
 		return -1;
 	}
@@ -537,7 +557,7 @@ int lonely_http::transfer()
 		fd2state[cur_peer]->state = STATE_CONNECTED;
 		fd2state[cur_peer]->header_time = 0;
 	} else {
-		fd2state[cur_peer]->state = STATE_TRANSFERING;
+		fd2state[cur_peer]->state = STATE_DOWNLOADING;
 	}
 
 	return 0;
@@ -601,7 +621,8 @@ int lonely_http::OPTIONS()
 {
 	string reply = "HTTP/1.1 200 OK\r\nDate: ";
 	reply += gmt_date;
-	reply += "\r\nServer: lophttpd\r\nContent-Length: 0\r\nAllow: OPTIONS, GET, HEAD, POST\r\n\r\n";
+	reply += "\r\nServer: lophttpd\r\nContent-Length: 0\r\nAllow: OPTIONS, GET, HEAD, POST, PUT\r\n\r\n";
+
 	log("OPTIONS\n");
 	if (writen(cur_peer, reply.c_str(), reply.size()) != (int)reply.size())
 		return -1;
@@ -630,12 +651,71 @@ int lonely_http::TRACE()
 }
 
 
-int lonely_http::PUT()
+int lonely_http::upload()
 {
-	log("PUT\n");
-	return send_error(HTTP_ERROR_405);
+	char buf[mss];
+	ssize_t n = 0;
+
+	if ((n = recv(cur_peer, buf, sizeof(buf), 0)) <= 0) {
+		close(fd2state[cur_peer]->fd);
+		return send_error(HTTP_ERROR_400);
+	}
+
+	if (write(fd2state[cur_peer]->fd, buf, n) != n) {
+		close(fd2state[cur_peer]->fd);
+		return send_error(HTTP_ERROR_500);
+	}
+
+	fd2state[cur_peer]->copied += n;
+
+	if (fd2state[cur_peer]->copied == fd2state[cur_peer]->left) {
+		string html = "<html><body>File ";
+		html += fd2state[cur_peer]->path;
+		html += " was successfully uploaded.</body></html>\n";
+		n = snprintf(buf, sizeof(buf), put_hdr_fmt.c_str(),
+		         gmt_date, html.size());
+
+		writen(cur_peer, buf, n);
+		writen(cur_peer, html.c_str(), html.size());
+
+		close(fd2state[cur_peer]->fd);
+		fd2state[cur_peer]->state = STATE_CONNECTED;
+		fd2state[cur_peer]->keep_alive = 0;
+	}
+
+	return 0;
 }
 
+
+int lonely_http::PUT()
+{
+	string logstr = "PUT ";
+	logstr += fd2state[cur_peer]->path;
+	logstr += "\n";
+	log(logstr);
+
+	int fd = 0;
+	fd2state[cur_peer]->offset = 0;
+	fd2state[cur_peer]->copied = 0;
+	fd2state[cur_peer]->left = fd2state[cur_peer]->blen;
+
+	if (httpd_config::rand_upload) {
+		char rnd[64];
+		struct timespec ts;
+		clock_gettime(CLOCK_REALTIME, &ts);
+		snprintf(rnd, sizeof(rnd), "-%08lx%08lx%08lx", cur_time, cur_usec, ts.tv_nsec);
+		fd2state[cur_peer]->path += rnd;
+	}
+
+	fd = ::open(fd2state[cur_peer]->path.c_str(), O_WRONLY|O_CREAT|O_EXCL, 0600);
+	if (fd < 0) {
+		return send_error(HTTP_ERROR_400);
+	}
+
+	fd2state[cur_peer]->fd = fd;
+	fd2state[cur_peer]->state = STATE_UPLOADING;
+	return 0;
+}
 
 
 int lonely_http::POST()
@@ -654,7 +734,7 @@ void lonely_http::clear_cache()
 	// do not close files in transfer
 	for (int i = 0; i <= max_fd; ++i) {
 		if (fd2state[i]) {
-			if (fd2state[i]->state == STATE_TRANSFERING) {
+			if (fd2state[i]->state == STATE_DOWNLOADING) {
 				inode ino = {fd2state[i]->dev, fd2state[i]->ino};
 				dont_close[ino] = 1;
 			}
@@ -843,7 +923,7 @@ int lonely_http::GETPOST()
 		fd2state[cur_peer]->copied = 0;
 		fd2state[cur_peer]->left = cur_end_range - cur_start_range;
 
-		if (transfer() < 0)
+		if (download() < 0)
 			return -1;
 	} else if (r == 0 && S_ISDIR(cur_stat.st_mode)) {
 		// No Range: requests for directories
@@ -859,7 +939,7 @@ int lonely_http::GETPOST()
 				fd2state[cur_peer]->offset = 0;
 				fd2state[cur_peer]->copied = 0;
 				fd2state[cur_peer]->left = cur_stat.st_size;
-				if (transfer() < 0)
+				if (download() < 0)
 					return -1;
 			} else
 				return send_error(HTTP_ERROR_404);
@@ -951,6 +1031,21 @@ int lonely_http::handle_request()
 	cur_start_range = cur_end_range = 0;
 	cur_range_requested = 0;
 
+	// The above if() already ensured we have header until "\r\n\r\n"
+	size_t cl = 0;
+	if ((ptr = strcasestr(req_buf, "\r\nContent-Length:")) != NULL) {
+		ptr += 17;
+		for (;ptr < end_ptr; ++ptr) {
+			if (*ptr != ' ')
+				break;
+		}
+		if (ptr >= end_ptr)
+			return send_error(HTTP_ERROR_400);
+		cl = strtoul(ptr, NULL, 10);
+	}
+
+	bool expecting = 0;
+
 	// Have the most likely request type first to skip needless
 	// compares
 	if (strncasecmp(req_buf, "GET", 3) == 0) {
@@ -959,26 +1054,15 @@ int lonely_http::handle_request()
 		ptr = req_buf + 3;
 
 	// For POST requests, we also require a Content-Length that matches.
-	// The above if() already ensured we have header until "\r\n\r\n"
 	} else if (strncmp(req_buf, "POST", 4) == 0) {
-		if ((ptr = strcasestr(req_buf, "Content-Length:")) != NULL) {
-			ptr += 15;
-			for (;ptr < end_ptr; ++ptr) {
-				if (*ptr != ' ')
-					break;
-			}
-			if (ptr >= end_ptr)
-				return send_error(HTTP_ERROR_400);
-			size_t cl = strtoul(ptr, NULL, 10);
-			if (cl >= sizeof(body))
-				return send_error(HTTP_ERROR_414);
-			// The body should be right here, we dont mind if stupid senders
-			// send them separately
-			if ((size_t)recv(cur_peer, body, sizeof(body), MSG_DONTWAIT) != cl)
-				return send_error(HTTP_ERROR_400);
-		} else {
+		if (cl == 0 || cl >= sizeof(body))
+			return send_error(HTTP_ERROR_414);
+		// The body should be right here, we dont mind if stupid senders
+		// send them separately
+		if ((size_t)recv(cur_peer, body, sizeof(body), MSG_DONTWAIT) != cl)
+			return send_error(HTTP_ERROR_400);
+		else
 			return send_error(HTTP_ERROR_411);
-		}
 		action = &lonely_http::POST;
 		cur_request = HTTP_REQUEST_POST;
 		ptr = req_buf + 4;
@@ -991,6 +1075,9 @@ int lonely_http::handle_request()
 		cur_request = HTTP_REQUEST_HEAD;
 		ptr = req_buf + 4;
 	} else if (strncasecmp(req_buf, "PUT", 3) == 0) {
+		fd2state[cur_peer]->blen = cl;
+		if (strcasestr(req_buf, "\r\nExpect:"))
+			expecting = 1;
 		action = &lonely_http::PUT;
 		cur_request = HTTP_REQUEST_PUT;
 		ptr = req_buf + 3;
@@ -1029,7 +1116,29 @@ int lonely_http::handle_request()
 	if (end_ptr - ptr > 1 && *end_ptr == '/')
 		*end_ptr = 0;
 
-	fd2state[cur_peer]->path = ptr;
+	// check for control characters to not land in the logfile
+	// 0-termination is guaranteed
+	for (int i = 0; ptr[i] != 0; ++i) {
+		if (iscntrl(ptr[i]))
+			return send_error(HTTP_ERROR_400);
+	}
+
+	// no .. in PUT reqquests
+	if (cur_request == HTTP_REQUEST_PUT) {
+		if (httpd_config::upload.size() == 0)
+			return send_error(HTTP_ERROR_400);
+		if (strstr(ptr, ".."))
+			return send_error(HTTP_ERROR_400);
+
+		if (expecting)
+			writen(cur_peer, "HTTP/1.1 100 Continue\r\n\r\n", 25);
+
+		fd2state[cur_peer]->path = httpd_config::upload;
+		if (*ptr != '/')
+			fd2state[cur_peer]->path += "/";
+		fd2state[cur_peer]->path += ptr;
+	} else
+		fd2state[cur_peer]->path = ptr;
 
 	ptr = end_ptr + 2; // rest of header
 	if (ptr > last_byte)
