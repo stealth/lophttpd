@@ -689,10 +689,15 @@ int lonely_http::upload()
 
 int lonely_http::PUT()
 {
+	string &p = fd2state[cur_peer]->path;
+
 	string logstr = "PUT ";
-	logstr += fd2state[cur_peer]->path;
+	logstr += p;
 	logstr += "\n";
 	log(logstr);
+
+	if (p.find("..") != string::npos)
+		return send_error(HTTP_ERROR_400);
 
 	int fd = 0;
 	fd2state[cur_peer]->offset = 0;
@@ -704,13 +709,11 @@ int lonely_http::PUT()
 		struct timespec ts;
 		clock_gettime(CLOCK_REALTIME, &ts);
 		snprintf(rnd, sizeof(rnd), "-%08lx%08lx%08lx", cur_time, cur_usec, ts.tv_nsec);
-		fd2state[cur_peer]->path += rnd;
+		p += rnd;
 	}
 
-	fd = ::open(fd2state[cur_peer]->path.c_str(), O_WRONLY|O_CREAT|O_EXCL, 0600);
-	if (fd < 0) {
+	if ((fd = ::open(p.c_str(), O_WRONLY|O_CREAT|O_EXCL, 0600)) < 0)
 		return send_error(HTTP_ERROR_400);
-	}
 
 	fd2state[cur_peer]->fd = fd;
 	fd2state[cur_peer]->state = STATE_UPLOADING;
@@ -1031,9 +1034,11 @@ int lonely_http::handle_request()
 	cur_start_range = cur_end_range = 0;
 	cur_range_requested = 0;
 
+
 	// The above if() already ensured we have header until "\r\n\r\n"
+	// Only PUT and POST require cl
 	size_t cl = 0;
-	if ((ptr = strcasestr(req_buf, "\r\nContent-Length:")) != NULL) {
+	if (req_buf[0] == 'P' && (ptr = strcasestr(req_buf, "\r\nContent-Length:")) != NULL) {
 		ptr += 17;
 		for (;ptr < end_ptr; ++ptr) {
 			if (*ptr != ' ')
@@ -1048,7 +1053,7 @@ int lonely_http::handle_request()
 
 	// Have the most likely request type first to skip needless
 	// compares
-	if (strncasecmp(req_buf, "GET", 3) == 0) {
+	if (strncmp(req_buf, "GET", 3) == 0) {
 		action = &lonely_http::GET;
 		cur_request = HTTP_REQUEST_GET;
 		ptr = req_buf + 3;
@@ -1066,30 +1071,30 @@ int lonely_http::handle_request()
 		action = &lonely_http::POST;
 		cur_request = HTTP_REQUEST_POST;
 		ptr = req_buf + 4;
-	} else if (strncasecmp(req_buf, "OPTIONS", 7) == 0) {
+	} else if (strncmp(req_buf, "OPTIONS", 7) == 0) {
 		action = &lonely_http::OPTIONS;
 		cur_request = HTTP_REQUEST_OPTIONS;
 		ptr = req_buf + 7;
-	} else if (strncasecmp(req_buf, "HEAD", 4) == 0) {
+	} else if (strncmp(req_buf, "HEAD", 4) == 0) {
 		action = &lonely_http::HEAD;
 		cur_request = HTTP_REQUEST_HEAD;
 		ptr = req_buf + 4;
-	} else if (strncasecmp(req_buf, "PUT", 3) == 0) {
+	} else if (strncmp(req_buf, "PUT", 3) == 0) {
 		fd2state[cur_peer]->blen = cl;
 		if (strcasestr(req_buf, "\r\nExpect:"))
 			expecting = 1;
 		action = &lonely_http::PUT;
 		cur_request = HTTP_REQUEST_PUT;
 		ptr = req_buf + 3;
-	} else if (strncasecmp(req_buf, "DELETE", 6) == 0) {
+	} else if (strncmp(req_buf, "DELETE", 6) == 0) {
 		action = &lonely_http::DELETE;
 		cur_request = HTTP_REQUEST_DELETE;
 		ptr = req_buf + 6;
-	} else if (strncasecmp(req_buf, "TRACE", 5) == 0) {
+	} else if (strncmp(req_buf, "TRACE", 5) == 0) {
 		action = &lonely_http::TRACE;
 		cur_request = HTTP_REQUEST_TRACE;
 		ptr = req_buf + 5;
-	} else if (strncasecmp(req_buf, "CONNECT", 7) == 0) {
+	} else if (strncmp(req_buf, "CONNECT", 7) == 0) {
 		action = &lonely_http::CONNECT;
 		cur_request = HTTP_REQUEST_CONNECT;
 		ptr = req_buf + 7;
@@ -1116,18 +1121,9 @@ int lonely_http::handle_request()
 	if (end_ptr - ptr > 1 && *end_ptr == '/')
 		*end_ptr = 0;
 
-	// check for control characters to not land in the logfile
-	// 0-termination is guaranteed
-	for (int i = 0; ptr[i] != 0; ++i) {
-		if (iscntrl(ptr[i]))
-			return send_error(HTTP_ERROR_400);
-	}
-
 	// no .. in PUT reqquests
 	if (cur_request == HTTP_REQUEST_PUT) {
 		if (httpd_config::upload.size() == 0)
-			return send_error(HTTP_ERROR_400);
-		if (strstr(ptr, ".."))
 			return send_error(HTTP_ERROR_400);
 
 		if (expecting)
