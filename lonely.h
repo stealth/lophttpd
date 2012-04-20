@@ -106,8 +106,6 @@ protected:
 	int af;
 	log_provider *logger;
 
-	std::map<int, time_t> shutdown_fds;
-
 	time_t cur_time;
 	suseconds_t cur_usec;
 	char gmt_date[64], local_date[64];

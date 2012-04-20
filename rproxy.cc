@@ -79,6 +79,14 @@ int rproxy::loop()
 
 		// assert: pfds[i].fd == i
 		for (i = first_fd; i <= max_fd; ++i) {
+
+			if (fd2state[i] && fd2state[i]->state == STATE_CLOSING) {
+				if (cur_time - fd2state[i]->alive_time > TIMEOUT_CLOSING) {
+					cleanup(i);
+					continue;
+				}
+			}
+
 			if (pfds[i].fd == -1)
 				continue;
 
@@ -350,16 +358,6 @@ int rproxy::loop()
 
 		}
 		calc_max_fd();
-
-		for (map<int, time_t>::iterator it = shutdown_fds.begin(); it != shutdown_fds.end();) {
-			if (cur_time - it->second > TIMEOUT_CLOSING || heavy_load) {
-				int fd = it->first;
-				shutdown_fds.erase(it++);
-				cleanup(fd);
-			} else
-				++it;
-		}
-
 	}
 
 	return 0;

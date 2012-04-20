@@ -214,7 +214,6 @@ void lonely<state_engine>::shutdown(int fd)
 		return;
 
 	::shutdown(fd, SHUT_RDWR);
-	shutdown_fds[fd] = cur_time;
 
 	fd2state[fd]->state = STATE_CLOSING;
 	fd2state[fd]->blen = 0;
@@ -225,8 +224,6 @@ void lonely<state_engine>::shutdown(int fd)
 	// do not set peer_fd to -1, as send_error() in proxy calls shutdown()
 	// and we dont have any reference to peer anymore but need to call clenup()
 	// on the peer
-	if (max_fd == fd)
-		--max_fd;
 }
 
 
@@ -245,17 +242,18 @@ void lonely<state_engine>::cleanup(int fd)
 
 	if (max_fd == fd)
 		--max_fd;
-
-	map<int, time_t>::iterator it = shutdown_fds.find(fd);
-	if (it != shutdown_fds.end())
-		shutdown_fds.erase(it);
 }
 
 
 template<typename state_engine>
 void lonely<state_engine>::calc_max_fd()
 {
+	// find the highest fd that is in use
 	for (int i = max_fd; i >= first_fd; --i) {
+		if (fd2state[i] && fd2state[i]->state != STATE_NONE) {
+			max_fd = i;
+			return;
+		}
 		if (pfds[i].fd != -1) {
 			max_fd = i;
 			return;
@@ -336,6 +334,14 @@ int lonely_http::loop()
 		strftime(gmt_date, sizeof(gmt_date), "%a, %d %b %Y %H:%M:%S GMT", &tm);
 
 		for (i = first_fd; i <= max_fd; ++i) {
+
+			if (fd2state[i] && fd2state[i]->state == STATE_CLOSING) {
+				if (cur_time - fd2state[i]->alive_time > TIMEOUT_CLOSING) {
+					cleanup(i);
+					continue;
+				}
+			}
+
 			if (pfds[i].fd == -1)
 				continue;
 			if (!fd2state[i] || fd2state[i]->state == STATE_NONE)
@@ -442,17 +448,6 @@ int lonely_http::loop()
 			pfds[i].revents = 0;
 		}
 		calc_max_fd();
-
-		// we need to handle TIMEOUT_CLOSING cases in a different loop, as poll()
-		// will always renturn .revents = POLLHUP even if we ask for no events
-		for (map<int, time_t>::iterator it = shutdown_fds.begin(); it != shutdown_fds.end();) {
-			if (cur_time - it->second > TIMEOUT_CLOSING || heavy_load) {
-				int fd = it->first;
-				shutdown_fds.erase(it++);
-				cleanup(fd);
-			} else
-				++it;
-		}
 	}
 	return 0;
 }
