@@ -82,6 +82,8 @@ struct http_state {
 	// might be called twice, so no double-free's
 	void cleanup()
 	{
+		if (state == STATE_UPLOADING)
+			close(fd);
 		fd = -1;
 		copied = left = 0;
 		offset = 0;

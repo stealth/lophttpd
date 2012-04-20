@@ -651,15 +651,12 @@ int lonely_http::upload()
 	char buf[mss];
 	ssize_t n = 0;
 
-	if ((n = recv(cur_peer, buf, sizeof(buf), 0)) <= 0) {
-		close(fd2state[cur_peer]->fd);
+	// upload file fd is closed via cleanup() in STATE_UPLOADING
+	if ((n = recv(cur_peer, buf, sizeof(buf), 0)) <= 0)
 		return send_error(HTTP_ERROR_400);
-	}
 
-	if (write(fd2state[cur_peer]->fd, buf, n) != n) {
-		close(fd2state[cur_peer]->fd);
+	if (write(fd2state[cur_peer]->fd, buf, n) != n)
 		return send_error(HTTP_ERROR_500);
-	}
 
 	fd2state[cur_peer]->copied += n;
 
