@@ -213,6 +213,11 @@ void lonely<state_engine>::shutdown(int fd)
 	if (fd2state[fd]->state == STATE_CLOSING || fd2state[fd]->state == STATE_NONE)
 		return;
 
+	if (fd2state[fd]->state == STATE_UPLOADING) {
+		close(fd2state[fd]->fd);
+		fd2state[fd]->fd = -1;
+	}
+
 	::shutdown(fd, SHUT_RDWR);
 
 	fd2state[fd]->state = STATE_CLOSING;
