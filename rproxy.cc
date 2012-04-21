@@ -81,7 +81,7 @@ int rproxy::loop()
 		for (i = first_fd; i <= max_fd; ++i) {
 
 			if (fd2state[i] && fd2state[i]->state == STATE_CLOSING) {
-				if (cur_time - fd2state[i]->alive_time > TIMEOUT_CLOSING) {
+				if (heavy_load || cur_time - fd2state[i]->alive_time > TIMEOUT_CLOSING) {
 					cleanup(i);
 					continue;
 				}
@@ -455,8 +455,8 @@ int rproxy::mangle_request_header()
 	}
 	buf[hlen] = 0;
 
-	if (strncasecmp(buf, "GET", 3) != 0 && strncasecmp(buf, "POST", 4) != 0 &&
-	    strncasecmp(buf, "HEAD", 4) != 0 && strncasecmp(buf, "PUT", 3) != 0) {
+	if (strncmp(buf, "GET", 3) != 0 && strncmp(buf, "POST", 4) != 0 &&
+	    strncmp(buf, "HEAD", 4) != 0 && strncmp(buf, "PUT", 3) != 0) {
 		send_error(HTTP_ERROR_405);
 		return -1;
 	}
@@ -497,7 +497,8 @@ int rproxy::mangle_request_header()
 
 	fd2state[cur_peer]->req_len = 0;
 	if ((ptr = strcasestr(buf, "\nContent-Length:"))) {
-		if (ptr + 21 >= end_ptr) {
+		ptr += 16;
+		if (ptr >= end_ptr) {
 			send_error(HTTP_ERROR_400);
 			return -1;
 		}
@@ -513,7 +514,7 @@ int rproxy::mangle_request_header()
 
 	// smash any existing X-Forward entries
 	while ((ptr = strcasestr(buf, "\nX-Forwarded-For"))) {
-		*ptr = 'Y';
+		ptr[1] = 'Y';
 	}
 	if ((ptr = strcasestr(buf, "\nHost:"))) {
 		ptr += 6;

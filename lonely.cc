@@ -340,7 +340,7 @@ int lonely_http::loop()
 
 		for (i = first_fd; i <= max_fd; ++i) {
 
-			if (fd2state[i] && fd2state[i]->state == STATE_CLOSING) {
+			if (heavy_load || (fd2state[i] && fd2state[i]->state == STATE_CLOSING)) {
 				if (cur_time - fd2state[i]->alive_time > TIMEOUT_CLOSING) {
 					cleanup(i);
 					continue;
@@ -1035,8 +1035,8 @@ int lonely_http::handle_request()
 	// The above if() already ensured we have header until "\r\n\r\n"
 	// Only PUT and POST require cl
 	size_t cl = 0;
-	if (req_buf[0] == 'P' && (ptr = strcasestr(req_buf, "\r\nContent-Length:")) != NULL) {
-		ptr += 17;
+	if (req_buf[0] == 'P' && (ptr = strcasestr(req_buf, "\nContent-Length:")) != NULL) {
+		ptr += 16;
 		for (;ptr < end_ptr; ++ptr) {
 			if (*ptr != ' ')
 				break;
