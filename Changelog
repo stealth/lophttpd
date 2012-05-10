@@ -1,8 +1,18 @@
+0.94
+----
+
++ can serve /proc and /sys files
++ can upload files, if enabled at runtime
++ added a logo
++ changed generated index.html to be smaller for
+  large directories (100k files)
+
 0.93
 ----
 
 + Added -flavor to remove #ifdef's
 + Added Android targets
++ can serve block device files now
 
 0.91
 ----

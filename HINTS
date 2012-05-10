@@ -10,4 +10,7 @@ in general:
 - Whenever possible use the "mmap" log provider, it really rocks. 
   (it requires the logfiles to be MB aligned, so you may need to remove
    them first if you previously didnt use the mmap provider)
+- split large directories (dirs containing like 100k files) into smaller ones
+  if you use autoindexing, as most web browsers cannot render large tables fastly
+
 

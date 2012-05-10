@@ -1,6 +1,11 @@
 lots of performance httpd
 =========================
 
+Latest version is at:
+
+http://github.com/stealth/lophttpd
+
+
 lophttpd was written to demonstrate (to myself) that it is possible
 to have a webserver running in a single thread and handling multiple
 connections at the same time. The ammount of connections is only limited by the
@@ -20,13 +25,19 @@ networks, ISO's, large image and video databases, tarballs etc.
 Features:
 
 + runs as unprived user in a chroot
++ IPv6 ready
 + does not require syslogd
 + supports multiple logproviders ("mmap" is very fast)
 + only handles static content (e.g. no CGI scripts etc)
 + runs in a single process
++ multicore support for Linux
 + integrated auto indexing support
 + integrated vhost support
 + can operate behind reverse proxy with -B
++ can serve block device files (whole HDD's), /sys and /proc files
++ does not need config files and has a quiet mode (Android)
++ native file upload support via PUT (default disabled)
+
 
 You should run lophttpd as root. Then it chroots itself to the
 "-R" parameter given on the commandline and drops the privileges

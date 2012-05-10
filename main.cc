@@ -78,7 +78,7 @@ void help(const char *p)
 	    <<"\t\t -p : port, default "<<httpd_config::port<<endl
 	    <<"\t\t -q : quiet mode; don't generate any logs or index.html files\n"
 	    <<"\t\t -S : sendfile() chunksize (no need to change), default: "<<httpd_config::mss<<endl
-	    <<"\t\t -U : upload dir, default disabled"<<endl
+	    <<"\t\t -U : upload dir inside web-root, default disabled"<<endl
 	    <<"\t\t -r : add rand token to uploaded filenames (default off)"<<endl<<endl;
 	exit(errno);
 }
