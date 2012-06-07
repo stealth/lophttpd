@@ -1160,7 +1160,7 @@ int lonely_http::handle_request()
 		if (ptr2 >= last_byte)
 			return send_error(HTTP_ERROR_400);
 
-		if ((end_ptr = strcasestr(ptr2, "\r\n"))) {
+		if ((end_ptr = strstr(ptr2, "\r\n"))) {
 
 			*end_ptr = 0;
 
@@ -1180,7 +1180,6 @@ int lonely_http::handle_request()
 		} else {
 			return send_error(HTTP_ERROR_400);
 		}
-
 	}
 
 	// Range: bytes 0-7350
