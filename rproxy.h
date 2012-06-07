@@ -66,15 +66,16 @@ struct rproxy_state {
 	off_t offset;
 	struct rproxy_config::backend node;
 	std::string opath, from_ip;
-	char buf[1024];
-	size_t blen, req_len;
+	char buf[4096];
+	size_t blen, chunk_len;
+	bool header, chunked;
 
 	http_instance_t type;
 
 	rproxy_state()
 	 : fd(-1), peer_fd(-1), keep_alive(0), state(STATE_ERROR), alive_time(0), header_time(0),
 	   opath(""), from_ip(""), blen(0),
-	   req_len(0), type(HTTP_NONE) {};
+	   chunk_len(0), header(1), chunked(0), type(HTTP_NONE) {};
 
 	void cleanup()
 	{
@@ -82,7 +83,9 @@ struct rproxy_state {
 		state = STATE_NONE;
 		type = HTTP_NONE;
 		node.host.clear(); node.path.clear(); opath.clear(); from_ip.clear();
-		blen = req_len = 0;
+		blen = chunk_len = 0;
+		header = 1;
+		chunked = 0;
 		alive_time = header_time = 0;
 	}
 };
@@ -96,7 +99,13 @@ private:
 
 	int mangle_server_reply();
 
-	int send_error(http_error_code_t);
+	ssize_t more_bytes();
+
+	ssize_t more_client_bytes();
+
+	ssize_t more_server_bytes();
+
+	int send_error(http_error_code_t, bool kill_conn = 1);
 
 	int de_escape_path(std::string &);
 

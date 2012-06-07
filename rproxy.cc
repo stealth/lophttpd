@@ -55,8 +55,9 @@ using namespace std;
 
 int rproxy::loop()
 {
-	int i = 0, wn = 0, r = 0, afd = -1, peer_fd = -1;
+	int i = 0, wn = 0, afd = -1, peer_fd = -1;
 	char from[64];
+	ssize_t r = 0;
 	size_t n = 0;
 	struct tm tm;
 	struct timeval tv;
@@ -217,6 +218,7 @@ int rproxy::loop()
 					fd2state[i]->state = STATE_CONNECTED;
 					fd2state[i]->alive_time = cur_time;
 					fd2state[i]->type = HTTP_CLIENT;
+					fd2state[i]->header = 0;
 
 					if (!fd2state[peer_fd]) {
 						fd2state[peer_fd] = new (nothrow) rproxy_state;
@@ -267,6 +269,7 @@ int rproxy::loop()
 				pfds[i].events = POLLIN|POLLOUT;
 				pfds[i].revents = 0;
 			} else if (fd2state[i]->state == STATE_CONNECTED) {
+
 				// peer not ready yet
 				if (!fd2state[fd2state[i]->peer_fd] ||
 				    fd2state[fd2state[i]->peer_fd]->state == STATE_CONNECTING) {
@@ -305,45 +308,21 @@ int rproxy::loop()
 						pfds[i].revents = 0;
 						continue;
 					}
-					n = sizeof(fd2state[i]->buf);
 
-					// For HTTP clients, only read one request at a time ...
-					if (fd2state[i]->type == HTTP_CLIENT) {
+					r = more_bytes();
 
-						// already slurped in whole request?
-						if (fd2state[i]->req_len == 0) {
-							fd2state[i]->state = STATE_DECIDING;
-							pfds[i].events = POLLIN;
-							pfds[i].revents = 0;
-							fd2state[i]->alive_time = cur_time;
-							fd2state[i]->header_time = 0;
-							continue;
-						}
-
-						if (fd2state[i]->req_len < sizeof(fd2state[i]->buf))
-							n = fd2state[i]->req_len;
-					}
-					r = read(i, fd2state[i]->buf, n);
-					if (r <= 0) {
+					if (r < 0) {
 						// no need to flush data here, as we won't be here
 						// with fd2state[i]->blen > 0
-						shutdown(fd2state[i]->peer_fd);
-						cleanup(i);
+						shutdown(fd2state[cur_peer]->peer_fd);
+						cleanup(cur_peer);
 						continue;
-					}
 
-					fd2state[i]->blen = r;
-
-					// ... to change state again after each request
-					if (fd2state[i]->type == HTTP_CLIENT) {
-						fd2state[i]->req_len -= r;
-						if (fd2state[i]->req_len == 0) {
-							fd2state[i]->state = STATE_DECIDING;
-							fd2state[i]->header_time = 0;
-						}
-					// server replies need to be Location: mapped
-					} else {
-						r = mangle_server_reply();
+					// could not read complete header or so
+					} else if (r == 0) {
+						pfds[cur_peer].events |= POLLIN;
+						pfds[cur_peer].revents = 0;
+						continue;
 					}
 
 					// peer has data to write
@@ -364,21 +343,136 @@ int rproxy::loop()
 }
 
 
+ssize_t rproxy::more_client_bytes()
+{
+	ssize_t r = 0;
+	size_t n = sizeof(fd2state[cur_peer]->buf);
+
+	// already slurped in whole request?
+	if (fd2state[cur_peer]->chunk_len == 0) {
+		fd2state[cur_peer]->header = 1;
+		fd2state[cur_peer]->state = STATE_DECIDING;
+		fd2state[cur_peer]->alive_time = cur_time;
+		fd2state[cur_peer]->header_time = 0;
+		return 0;
+	}
+
+	if (fd2state[cur_peer]->chunk_len < sizeof(fd2state[cur_peer]->buf))
+		n = fd2state[cur_peer]->chunk_len;
+
+	r = read(cur_peer, fd2state[cur_peer]->buf, n);
+
+	if (r <= 0)
+		return -1;
+
+	fd2state[cur_peer]->blen = r;
+
+	// ... to change state again after each request
+	fd2state[cur_peer]->chunk_len -= r;
+	if (fd2state[cur_peer]->chunk_len == 0) {
+		fd2state[cur_peer]->header = 1;
+		fd2state[cur_peer]->state = STATE_DECIDING;
+		fd2state[cur_peer]->header_time = 0;
+	}
+
+	return r;
+}
+
+
+ssize_t rproxy::more_bytes()
+{
+	if (fd2state[cur_peer]->type == HTTP_CLIENT)
+		return more_client_bytes();
+
+	return more_server_bytes();
+}
+
+
+ssize_t rproxy::more_server_bytes()
+{
+	ssize_t r = 0;
+	size_t n = sizeof(fd2state[cur_peer]->buf);
+
+	if (fd2state[cur_peer]->header) {
+		char buf[4096], *ptr = NULL;
+		memset(buf, 0, sizeof(buf));
+		errno = 0;
+		if ((r = recv(cur_peer, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
+			if (errno == EAGAIN)
+				return 0;
+			return -1;
+		}
+
+		// If first read, set initial timestamp for header TO
+		if (fd2state[cur_peer]->header_time == 0)
+			fd2state[cur_peer]->header_time = cur_time;
+
+		if ((ptr = strstr(buf, "\r\n\r\n")) == NULL) {
+			if (cur_time - fd2state[cur_peer]->header_time > TIMEOUT_HEADER)
+				return -1;
+			return 0;
+		}
+
+		size_t hlen = ptr - buf + 4;
+
+		if (hlen >= sizeof(fd2state[cur_peer]->buf))
+			return -1;
+
+		if ((r = read(cur_peer, fd2state[cur_peer]->buf, hlen)) != (ssize_t)hlen)
+			return -1;
+
+		fd2state[cur_peer]->buf[hlen] = 0;
+		fd2state[cur_peer]->blen = hlen;
+		fd2state[cur_peer]->header = 0;
+
+		if (mangle_server_reply() < 0)
+			return -1;
+	} else {
+		if (fd2state[cur_peer]->chunk_len < sizeof(fd2state[cur_peer]->buf))
+			n = fd2state[cur_peer]->chunk_len;
+
+		r = read(cur_peer, fd2state[cur_peer]->buf, n);
+
+		if (r <= 0)
+			return -1;
+
+		fd2state[cur_peer]->blen = r;
+		fd2state[cur_peer]->chunk_len -= r;
+
+		if (fd2state[cur_peer]->chunk_len == 0) {
+			fd2state[cur_peer]->header = 1;
+			fd2state[cur_peer]->header_time = 0;
+		}
+	}
+
+	return r;
+}
+
+
 int rproxy::mangle_server_reply()
 {
 	if (fd2state[cur_peer]->type != HTTP_SERVER)
 		return 0;
 
-	char *hdr_end = NULL, *location = NULL, *nl = NULL, *buf = fd2state[cur_peer]->buf;
+	char *hdr_end = NULL, *location = NULL, *nl = NULL, *buf = fd2state[cur_peer]->buf, *ptr = NULL;
 	size_t blen = fd2state[cur_peer]->blen;
 
-	// A real server reply header?
-	if (strncmp(buf, "HTTP", 4) != 0)
-		return 0;
 	if ((hdr_end = strstr(buf, "\r\n\r\n")) == NULL)
 		return 0;
 	if ((size_t)(hdr_end - buf) >= blen)
 		return 0;
+
+	fd2state[cur_peer]->chunk_len = 0;
+	if ((ptr = strcasestr(buf, "\nContent-Length:"))) {
+		ptr += 16;
+		if (ptr >= hdr_end)
+			return -1;
+		fd2state[cur_peer]->chunk_len = strtoul(ptr, NULL, 10);
+		if (fd2state[cur_peer]->chunk_len > 0x10000000) {
+			send_error(HTTP_ERROR_414);
+			return -1;
+		}
+	}
 
 	if ((location = strstr(buf, "\nLocation:")) == NULL)
 		return 0;
@@ -386,12 +480,12 @@ int rproxy::mangle_server_reply()
 	while (*location == ' ' && location < hdr_end)
 		++location;
 	if ((size_t)(location - buf) >= blen)
-		return 0;
+		return -1;
 	if ((nl = strchr(location, '\r')) == NULL)
-		return 0;
+		return -1;
 
 	if ((size_t)(nl - buf) >= blen)
-		return 0;
+		return -1;
 
 	map<string, string>::iterator i = location_map.begin();
 	for (; i != location_map.end(); ++i) {
@@ -400,7 +494,7 @@ int rproxy::mangle_server_reply()
 	}
 
 	if (i == location_map.end())
-		return 0;
+		return -1;
 
 	string hdr = string(buf, blen);
 	string new_loc = rproxy_config::location;
@@ -410,7 +504,7 @@ int rproxy::mangle_server_reply()
 	hdr.replace(location - buf, i->first.size(), new_loc);
 
 	if (hdr.size() >= sizeof(fd2state[cur_peer]->buf))
-		return 0;
+		return -1;
 	memcpy(buf, hdr.c_str(), hdr.size());
 	fd2state[cur_peer]->blen = hdr.size();
 	return 0;
@@ -421,7 +515,7 @@ int rproxy::mangle_server_reply()
 // socket fd otherwise
 int rproxy::mangle_request_header()
 {
-	char buf[2048], *ptr = NULL, *end_ptr = NULL, *path_begin = NULL,
+	char buf[4096], *ptr = NULL, *end_ptr = NULL, *path_begin = NULL,
 	     *path_end = NULL, *host_begin = NULL, *host_end = NULL;
 	int r = 0;
 
@@ -495,15 +589,15 @@ int rproxy::mangle_request_header()
 		return -1;
 	}
 
-	fd2state[cur_peer]->req_len = 0;
+	fd2state[cur_peer]->chunk_len = 0;
 	if ((ptr = strcasestr(buf, "\nContent-Length:"))) {
 		ptr += 16;
 		if (ptr >= end_ptr) {
 			send_error(HTTP_ERROR_400);
 			return -1;
 		}
-		fd2state[cur_peer]->req_len = strtoul(ptr, NULL, 10);
-		if (fd2state[cur_peer]->req_len > 0x10000000) {
+		fd2state[cur_peer]->chunk_len = strtoul(ptr, NULL, 10);
+		if (fd2state[cur_peer]->chunk_len > 0x10000000) {
 			send_error(HTTP_ERROR_414);
 			return -1;
 		}
@@ -549,10 +643,11 @@ int rproxy::mangle_request_header()
 		}
 	}
 
-	// No match?
+	// No match? Do not kill connection, as some buggy browsers always
+	// send a request for /favicon.ico, no matter what html-base is
 	if (!mlen) {
-		send_error(HTTP_ERROR_404);
-		return -1;
+		send_error(HTTP_ERROR_404, 0);
+		return 0;
 	}
 
 
@@ -669,7 +764,7 @@ int rproxy::de_escape_path(string &p)
 
 
 
-int rproxy::send_error(http_error_code_t e)
+int rproxy::send_error(http_error_code_t e, bool kill_conn)
 {
 	string http_header = "HTTP/1.1 ";
 
@@ -687,7 +782,8 @@ int rproxy::send_error(http_error_code_t e)
 	if (writen(cur_peer, http_header.c_str(), http_header.size()) <= 0)
 		return -1;
 
-	shutdown(cur_peer);
+	if (kill_conn)
+		shutdown(cur_peer);
 	return 0;
 }
 
