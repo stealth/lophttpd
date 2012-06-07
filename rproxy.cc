@@ -462,7 +462,7 @@ int rproxy::mangle_server_reply()
 	if ((size_t)(hdr_end - buf) >= blen)
 		return 0;
 
-	fd2state[cur_peer]->chunk_len = 0;
+	fd2state[cur_peer]->chunk_len = 0x10000000;
 	if ((ptr = strcasestr(buf, "\nContent-Length:"))) {
 		ptr += 16;
 		if (ptr >= hdr_end)
