@@ -16,7 +16,7 @@ namespace httpd_config
 	string root = "/srv/www/htdocs", base = "/";
 	string upload = "";
 	bool gen_index = 0, virtual_hosts = 0, is_chrooted = 0, quiet = 0;
-	bool rand_upload = 0;
+	bool rand_upload = 0, no_error_kill = 0, rand_upload_quiet = 0;
 	string user = "wwwrun", logfile = "/var/log/lophttpd", log_provider = "file";
 	uid_t user_uid = 99, user_gid = 99;
 	string host = "0.0.0.0", port = "80";

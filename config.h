@@ -14,7 +14,7 @@ namespace httpd_config
 	extern std::string root, base;
 	extern std::string upload;
 	extern bool gen_index, virtual_hosts, is_chrooted, quiet;
-	extern bool rand_upload;
+	extern bool rand_upload, no_error_kill, rand_upload_quiet;
 	extern std::string user, logfile, log_provider;
 	extern uid_t user_uid, user_gid;
 	extern std::string host, port;

@@ -667,7 +667,8 @@ int lonely_http::upload()
 
 	if (fd2state[cur_peer]->copied == fd2state[cur_peer]->left) {
 		string html = "<html><body>File ";
-		html += fd2state[cur_peer]->path;
+		if (!httpd_config::rand_upload_quiet)
+			html += fd2state[cur_peer]->path;
 		html += " was successfully uploaded.</body></html>\n";
 		n = snprintf(buf, sizeof(buf), put_hdr_fmt.c_str(),
 		         gmt_date, html.size());
@@ -971,15 +972,20 @@ int lonely_http::send_error(http_error_code_t e)
 	if (e == HTTP_ERROR_405)
 		http_header += "\r\nAllow: OPTIONS, GET, HEAD, POST";
 
-	http_header += "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-	fd2state[cur_peer]->keep_alive = 0;
+	if (!httpd_config::no_error_kill) {
+		http_header += "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+		fd2state[cur_peer]->keep_alive = 0;
+	} else
+		http_header += "\r\nContent-Length: 0\r\n\rn";
 
 	if (writen(cur_peer, http_header.c_str(), http_header.size()) <= 0) {
 		shutdown(cur_peer);
 		return -1;
 	}
 
-	shutdown(cur_peer);
+	if (!httpd_config::no_error_kill)
+		shutdown(cur_peer);
+
 	return 0;
 }
 

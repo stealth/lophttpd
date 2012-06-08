@@ -153,6 +153,13 @@ As well as device files, lophttpd can serve /proc or /sys file systems.
 !!! Be aware about the security consequences and that you sometimes will
 get wrong resuls (proc/<pid> dirs come and go) !!!
 
+If your web clients send a lot of requests to non existing files,
+e.g. some buggy browsers always request /favicon.ico, no matter of
+the base URL, you may consider using '-E' which does not close
+the connection after non-fatal errors. That saves overhead of accepting
+new connections and can matter if a lot of crippled requests are expected
+from legit clients due to buggy browser/setups.
+
 
 File upload
 -----------
@@ -161,8 +168,9 @@ Lophttpd supports file upload (via PUT method) directly, w/o the need
 for external CGI scripts or alike.
 
 On the machine running lophttpd, you have to create a directory
-named 'upload' _inside the webroot_, which must be owned by the
-user you run lhttpd as (e.g. 'wwwrun'). Then start lhttpd like:
+named 'upload' _inside the webroot_ (and inside your vHost setup if any),
+which must be owned by the user you run lhttpd as (e.g. 'wwwrun'). Then
+start lhttpd like:
 
 # lhttpd -n 1 -i -U /upload
 
@@ -173,7 +181,10 @@ $ curl --upload-file /path/to/file http://lophttpd.host:port
 Then, the file is transfered to $WEBROOT/upload/file. If you additionally
 start lhttpd with '-r', a random token is appended to the file when its stored.
 If you put an empty index.html inside 'upload', outside visitors cannot
-download the uploaded file, as they do not know the URL.
+download the uploaded file, as they do not know the URL. If you want that
+nobody, not even the uploader can see the URL, you can use '-Q'.
+This effectively creates you an upload-only service where you can store
+submitted documents which nobody can download.
 
 If you have ideas and or offer performance/testing environment please
 drop me an email: sebastian.krahmer [at] gmail [dot] com :-)

@@ -64,21 +64,26 @@ void die(const char *s, bool please_die = 1)
 void help(const char *p)
 {
 	cerr<<"Usage: "<<p<<" [-6] [-R web-root] [-B html-base-tag] [-iH] [-I IP] [-u user]\n"
-	    <<"\t\t [-l logfile] [-p port] [-L provider] [-n nCores] [-S n] [-U upload] [-r]\n\n"
-	    <<"\t\t -6 : use IPv6, default is IPv4\n"
+	    <<"\t\t [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n"
+	    <<"\t\t [-U upload] [-r] [-E] [-Q]\n\n"
+	    <<"\tcommonly used options:\n\n"
 	    <<"\t\t -R : web-root, default "<<httpd_config::root<<endl
-	    <<"\t\t -B : <base> 'http://...' tag, if operating behind a proxy\n"
 	    <<"\t\t -i : use autoindexing\n"
 	    <<"\t\t -I : IP(6) to bind to, default {INADDR_ANY}\n"
 	    <<"\t\t -H : use vhosts (requires vhost setup in web-root)\n"
 	    <<"\t\t -u : run as this user, default "<<httpd_config::user<<endl
-	    <<"\t\t -l : logfile, default "<<httpd_config::logfile<<endl
-	    <<"\t\t -L : logprovider, default "<<httpd_config::log_provider<<endl
 	    <<"\t\t -n : number of CPU cores to use, default all"<<endl
-	    <<"\t\t -p : port, default "<<httpd_config::port<<endl
+	    <<"\t\t -p : port, default "<<httpd_config::port<<endl<<endl
+	    <<"\trarely used options:\n\n"
+	    <<"\t\t -6 : use IPv6, default is IPv4\n"
+	    <<"\t\t -l : logfile, default "<<httpd_config::logfile<<endl
+	    <<"\t\t -L : logprovider, default '"<<httpd_config::log_provider<<"'"<<endl
+	    <<"\t\t -B : <base> 'http://...' tag, if operating behind a proxy\n"
 	    <<"\t\t -q : quiet mode; don't generate any logs or index.html files\n"
 	    <<"\t\t -S : sendfile() chunksize (no need to change), default: "<<httpd_config::mss<<endl
 	    <<"\t\t -U : upload dir inside web-root, default disabled"<<endl
+	    <<"\t\t -E : do not close connection on invalid requests, default disabled"<<endl
+	    <<"\t\t -Q : (implies -r) do not tell client the rand token (for write-only uploads)"<<endl
 	    <<"\t\t -r : add rand token to uploaded filenames (default off)"<<endl<<endl;
 	exit(errno);
 }
@@ -125,7 +130,7 @@ int main(int argc, char **argv)
 		cerr<<"Continuing in UNSAFE mode!\n\n";
 	}
 
-	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:r")) != -1) {
+	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQ")) != -1) {
 		switch (c) {
 		case '6':
 			httpd_config::host = "::0";
@@ -172,6 +177,13 @@ int main(int argc, char **argv)
 			break;
 		case 'r':
 			httpd_config::rand_upload = 1;
+			break;
+		case 'Q':
+			httpd_config::rand_upload = 1;
+			httpd_config::rand_upload_quiet = 1;
+			break;
+		case 'E':
+			httpd_config::no_error_kill = 1;
 			break;
 		case 'h':
 		default:
