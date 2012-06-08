@@ -392,11 +392,12 @@ ssize_t rproxy::more_server_bytes()
 {
 	ssize_t r = 0;
 	size_t n = sizeof(fd2state[cur_peer]->buf);
+	char buf[4096], *ptr = NULL;
+
 
 	if (fd2state[cur_peer]->header) {
-		char buf[4096], *ptr = NULL;
-		memset(buf, 0, sizeof(buf));
 		errno = 0;
+		memset(buf, 0, sizeof(buf));
 		if ((r = recv(cur_peer, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
 			if (errno == EAGAIN)
 				return 0;
@@ -427,8 +428,44 @@ ssize_t rproxy::more_server_bytes()
 
 		if (mangle_server_reply() < 0)
 			return -1;
+
+	// read chunk size, if chunked encoding and complete chunk or header has been slurped
+	} else if (fd2state[cur_peer]->chunked && fd2state[cur_peer]->chunk_len == 0) {
+		errno = 0;
+		memset(buf, 0, sizeof(buf));
+		if ((r = recv(cur_peer, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0)
+			return -1;
+
+		// that was the last chunk?
+		if (strncmp(buf, "\r\n0\r\n\r\n", 7) == 0) {
+			fd2state[cur_peer]->header = 1;
+			if ((r = read(cur_peer, fd2state[cur_peer]->buf, 7)) != 7)
+				return -1;
+			fd2state[cur_peer]->blen = 7;
+			fd2state[cur_peer]->header = 1;
+		} else {
+			if ((ptr = strstr(buf, "\r\n")) == NULL)
+				return -1;
+			fd2state[cur_peer]->chunk_len = strtoul(buf, NULL, 16);
+
+			if (fd2state[cur_peer]->chunk_len > 0x10000000)
+				return -1;
+
+			// also need to read in that 'chunksize\r\n'
+			fd2state[cur_peer]->chunk_len += (ptr - buf + 2);
+			n = sizeof(fd2state[cur_peer]->buf);
+
+			if (fd2state[cur_peer]->chunk_len < n)
+				n = fd2state[cur_peer]->chunk_len;
+
+			if ((r = read(cur_peer, fd2state[cur_peer]->buf, n)) <= 0)
+				return -1;
+
+			fd2state[cur_peer]->blen = r;
+			fd2state[cur_peer]->chunk_len -= r;
+		}
 	} else {
-		if (fd2state[cur_peer]->chunk_len < sizeof(fd2state[cur_peer]->buf))
+		if (fd2state[cur_peer]->chunk_len < n)
 			n = fd2state[cur_peer]->chunk_len;
 
 		r = read(cur_peer, fd2state[cur_peer]->buf, n);
@@ -439,7 +476,7 @@ ssize_t rproxy::more_server_bytes()
 		fd2state[cur_peer]->blen = r;
 		fd2state[cur_peer]->chunk_len -= r;
 
-		if (fd2state[cur_peer]->chunk_len == 0) {
+		if (fd2state[cur_peer]->chunk_len == 0 && !fd2state[cur_peer]->chunked) {
 			fd2state[cur_peer]->header = 1;
 			fd2state[cur_peer]->header_time = 0;
 		}
@@ -454,8 +491,8 @@ int rproxy::mangle_server_reply()
 	if (fd2state[cur_peer]->type != HTTP_SERVER)
 		return 0;
 
-	char *hdr_end = NULL, *location = NULL, *nl = NULL, *buf = fd2state[cur_peer]->buf, *ptr = NULL;
 	size_t blen = fd2state[cur_peer]->blen;
+	char *hdr_end = NULL, *location = NULL, *nl = NULL, *buf = fd2state[cur_peer]->buf, *ptr = NULL;
 
 	if ((hdr_end = strstr(buf, "\r\n\r\n")) == NULL)
 		return 0;
@@ -463,6 +500,7 @@ int rproxy::mangle_server_reply()
 		return 0;
 
 	fd2state[cur_peer]->chunk_len = 0x10000000;
+	fd2state[cur_peer]->chunked = 0;
 	if ((ptr = strcasestr(buf, "\nContent-Length:"))) {
 		ptr += 16;
 		if (ptr >= hdr_end)
@@ -472,10 +510,23 @@ int rproxy::mangle_server_reply()
 			send_error(HTTP_ERROR_414);
 			return -1;
 		}
+	} else if ((ptr = strcasestr(buf, "\nTransfer-Encoding:"))) {
+		ptr += 19;
+		if (ptr >= hdr_end)
+			return -1;
+		if (strcasestr(ptr, "chunked")) {
+			fd2state[cur_peer]->chunked = 1;
+
+			// will be assigned in more_server_bytes()
+			fd2state[cur_peer]->chunk_len = 0;
+		}
 	}
 
-	if ((location = strstr(buf, "\nLocation:")) == NULL)
+	if ((location = strcasestr(buf, "\nLocation:")) == NULL)
 		return 0;
+	if (strstr(buf, "Redirect") == NULL)
+		return 0;
+
 	location += 10;
 	while (*location == ' ' && location < hdr_end)
 		++location;
