@@ -39,6 +39,7 @@
 #include <string>
 #include <cstdio>
 #include <fcntl.h>
+#include <unistd.h>
 #include <errno.h>
 #include <sys/sendfile.h>
 

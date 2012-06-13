@@ -41,6 +41,7 @@
 #include <netinet/in.h>
 #include <string>
 #include <stdint.h>
+#include <unistd.h>
 #include <map>
 #include <utility>
 #include "log.h"
