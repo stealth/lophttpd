@@ -153,6 +153,12 @@ As well as device files, lophttpd can serve /proc or /sys file systems.
 !!! Be aware about the security consequences and that you sometimes will
 get wrong resuls (proc/<pid> dirs come and go) !!!
 
+Please note that serving /proc, /sys and device files is a special
+operation mode and not optimized for thousands of clients (although
+its possible to do that) and that some of these files are blocking
+so do not try to serve a block device that is a tape drive without a
+tape or so. There is no web server which can do that, not even lophttpd.
+
 If your web clients send a lot of requests to non existing files,
 e.g. some buggy browsers always request /favicon.ico, no matter of
 the base URL, you may consider using '-E' which does not close
