@@ -97,9 +97,11 @@ int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &co
 	if (ftype == FILE_PROC) {
 		char buf[n], siz[32];
 		r = pread(fd, buf, sizeof(buf), *offset);
-		if (r < 0)
+		if (r < 0) {
+			if (errno == EAGAIN)
+				errno = EBADF;
 			return -1;
-		if (r > 0) {
+		} else if (r > 0) {
 			l = snprintf(siz, sizeof(siz), "%x\r\n", (int)r);
 			if (writen(peer, siz, l) != l)
 				return -1;

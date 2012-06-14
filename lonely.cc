@@ -830,21 +830,24 @@ int lonely_http::stat()
 int lonely_http::open()
 {
 	int fd = -1;
-
+	int flags = O_RDONLY|O_NOCTTY;
 	struct inode i = {fd2state[cur_peer]->dev, fd2state[cur_peer]->ino};
+
+	if (fd2state[cur_peer]->ftype == FILE_PROC)
+		flags |= O_NONBLOCK;
 
 	map<inode, int>::iterator it = file_cache.find(i);
 	if (it != file_cache.end()) {
 		fd = it->second;
 	} else {
-		fd = ::open(fd2state[cur_peer]->path.c_str(), O_RDONLY|O_NOCTTY);
+		fd = ::open(fd2state[cur_peer]->path.c_str(), flags);
 		if (fd >= 0) {
 			file_cache[i] = fd;
 		// Too many open files? Drop caches
 		} else if (errno == EMFILE || errno == ENFILE) {
 			heavy_load = 1;
 			clear_cache();
-			fd = ::open(fd2state[cur_peer]->path.c_str(), O_RDONLY|O_NOCTTY);
+			fd = ::open(fd2state[cur_peer]->path.c_str(), flags);
 			if (fd >= 0)
 				file_cache[i] = fd;
 		}
