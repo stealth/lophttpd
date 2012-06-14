@@ -45,6 +45,7 @@
 
 #include "socket.h"
 #include "flavor.h"
+#include "lonely.h"
 
 
 namespace flavor {
@@ -88,23 +89,31 @@ int device_size(const std::string &path, size_t &size)
 }
 
 
-int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, bool is_dev)
+int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, int ftype)
 {
 	ssize_t r = 0, l = 0;
 
-	// proc files
-	if (left == 0 && copied == 0) {
-		char buf[10000], siz[32];
+	// proc and sys files
+	if (ftype == FILE_PROC) {
+		char buf[n], siz[32];
 		r = pread(fd, buf, sizeof(buf), *offset);
-		l = snprintf(siz, sizeof(siz), "%x\r\n", (int)r);
-		if (writen(peer, siz, l) != l)
+		if (r < 0)
 			return -1;
-		if (writen(peer, buf, r) != r)
-			return -1;
-		if (writen(peer, "\r\n0\r\n\r\n", 7) != 7)
-			return -1;
-		left = 0;
-		copied = r;
+		if (r > 0) {
+			l = snprintf(siz, sizeof(siz), "%x\r\n", (int)r);
+			if (writen(peer, siz, l) != l)
+				return -1;
+			if (writen(peer, buf, r) != r)
+				return -1;
+			if (writen(peer, "\r\n", 2) != 2)
+				return -1;
+			*offset += r;
+			copied += r;
+		} else {
+			if (writen(peer, "0\r\n\r\n", 5) != 5)
+				return -1;
+			left = 0;
+		}
 		return 0;
 	}
 

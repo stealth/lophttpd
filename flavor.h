@@ -57,7 +57,7 @@ int device_size(const std::string &, size_t &);
 
 // calls sendfile() if !is_dev indicates that. returns 0 on success, -1 on error.
 // uses normal read/write if sendfile cannot be used. updates offset, left and copied accordingly
-int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, bool is_dev);
+int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, int);
 
 }
 

@@ -60,6 +60,14 @@ typedef enum {
 } status_t;
 
 
+typedef enum {
+	FILE_REGULAR = 0,
+	FILE_SPECIAL = 1,
+	FILE_DEVICE = 2,
+	FILE_PROC = 3
+} file_t;
+
+
 // basic state struct needed for an httpd server
 struct http_state {
 	int fd;
@@ -72,13 +80,13 @@ struct http_state {
 	ino_t ino;
 	std::string path, from_ip;
 	int ct;
-	bool is_dev;
+	file_t ftype;
 	size_t blen;
 
 	http_state()
 	 : fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
 	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), from_ip(""), ct(0),
-	   is_dev(0), blen(0) {};
+	   ftype(FILE_REGULAR), blen(0) {};
 
 	// might be called twice, so no double-free's
 	void cleanup()
@@ -92,7 +100,7 @@ struct http_state {
 		alive_time = header_time = 0;
 		dev = ino = 0;
 		ct = 0;
-		is_dev = 0;
+		ftype = FILE_REGULAR;
 		state = STATE_NONE;
 		path.clear(); from_ip.clear();
 		blen = 0;

@@ -67,7 +67,8 @@ struct rproxy_state {
 	struct rproxy_config::backend node;
 	std::string opath, from_ip;
 	char buf[4096];
-	size_t blen, chunk_len;
+	size_t blen;
+	uint64_t chunk_len;
 	bool header, chunked;
 
 	http_instance_t type;

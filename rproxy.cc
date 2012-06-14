@@ -437,22 +437,22 @@ ssize_t rproxy::more_server_bytes()
 			return -1;
 
 		// that was the last chunk?
-		if (strncmp(buf, "\r\n0\r\n\r\n", 7) == 0) {
-			fd2state[cur_peer]->header = 1;
-			if ((r = read(cur_peer, fd2state[cur_peer]->buf, 7)) != 7)
+		if (strncmp(buf, "0\r\n\r\n", 5) == 0) {
+			if ((r = read(cur_peer, fd2state[cur_peer]->buf, 5)) != 5)
 				return -1;
-			fd2state[cur_peer]->blen = 7;
+			fd2state[cur_peer]->blen = 5;
 			fd2state[cur_peer]->header = 1;
+			fd2state[cur_peer]->header_time = 0;
 		} else {
 			if ((ptr = strstr(buf, "\r\n")) == NULL)
 				return -1;
 			fd2state[cur_peer]->chunk_len = strtoul(buf, NULL, 16);
 
-			if (fd2state[cur_peer]->chunk_len > 0x10000000)
+			if (fd2state[cur_peer]->chunk_len > 0x100000000)
 				return -1;
 
-			// also need to read in that 'chunksize\r\n'
-			fd2state[cur_peer]->chunk_len += (ptr - buf + 2);
+			// also need to read in that 'chunksize\r\n' and the \r\n after the chunk
+			fd2state[cur_peer]->chunk_len += (ptr - buf + 2) + 2;
 			n = sizeof(fd2state[cur_peer]->buf);
 
 			if (fd2state[cur_peer]->chunk_len < n)
@@ -499,14 +499,14 @@ int rproxy::mangle_server_reply()
 	if ((size_t)(hdr_end - buf) >= blen)
 		return 0;
 
-	fd2state[cur_peer]->chunk_len = 0x10000000;
+	fd2state[cur_peer]->chunk_len = 0x100000000;
 	fd2state[cur_peer]->chunked = 0;
 	if ((ptr = strcasestr(buf, "\nContent-Length:"))) {
 		ptr += 16;
 		if (ptr >= hdr_end)
 			return -1;
 		fd2state[cur_peer]->chunk_len = strtoul(ptr, NULL, 10);
-		if (fd2state[cur_peer]->chunk_len > 0x10000000) {
+		if (fd2state[cur_peer]->chunk_len > 0x100000000) {
 			send_error(HTTP_ERROR_414);
 			return -1;
 		}
@@ -648,7 +648,7 @@ int rproxy::mangle_request_header()
 			return -1;
 		}
 		fd2state[cur_peer]->chunk_len = strtoul(ptr, NULL, 10);
-		if (fd2state[cur_peer]->chunk_len > 0x10000000) {
+		if (fd2state[cur_peer]->chunk_len > 0x100000000) {
 			send_error(HTTP_ERROR_414);
 			return -1;
 		}

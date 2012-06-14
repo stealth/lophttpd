@@ -467,8 +467,8 @@ int lonely_http::send_http_header()
 		l = snprintf(hbuf, sizeof(hbuf), part_hdr_fmt.c_str(),
 	                     gmt_date, fd2state[cur_peer]->left, misc::content_types[fd2state[cur_peer]->ct].c_type.c_str(),
 			     cur_start_range, cur_end_range - 1, cur_stat.st_size);
-	// special regular file (proc)
-	} else if (cur_stat.st_size == 0) {
+	// special regular file (proc or sys)
+	} else if (fd2state[cur_peer]->ftype == FILE_PROC) {
 		l = snprintf(hbuf, sizeof(hbuf), chunked_hdr_fmt.c_str(),
 		             gmt_date, "text/plain");
 	} else {
@@ -542,7 +542,7 @@ int lonely_http::download()
 	                     n,
 	                     fd2state[cur_peer]->left,		// updated by sendfile
 	                     fd2state[cur_peer]->copied,	// updated by sendfile
-	                     fd2state[cur_peer]->is_dev);
+	                     fd2state[cur_peer]->ftype);
 
 	// Dummy reset of r, if EAGAIN appears on nonblocking socket
 	if (errno == EAGAIN)
@@ -794,14 +794,13 @@ int lonely_http::stat()
 		if (!flavor::servable_file(cur_stat))
 			return -1;
 
-		// workaround for /sys files which are always reported 4096 byte in size
-		// but contain less and have 0 blocks
-		if (S_ISREG(cur_stat.st_mode) && cur_stat.st_blocks == 0)
-			cur_stat.st_size = 0;
+		// workaround for /proc and /sys files which are always reported 0 byte in size
+		if (S_ISREG(cur_stat.st_mode) && cur_stat.st_blocks == 0) {
+			fd2state[cur_peer]->ftype = FILE_PROC;
 
 		// special case for blockdevices; if not already fetched size,
 		// put it into cur_stat
-		if (flavor::servable_device(cur_stat)) {
+		} else if (flavor::servable_device(cur_stat)) {
 			if (cur_stat.st_size == 0) {
 				// updates size if apropriate
 				size_t size;
@@ -811,7 +810,7 @@ int lonely_http::stat()
 				cacheit = 1;
 			}
 			ct = misc::CONTENT_DATA;
-			fd2state[cur_peer]->is_dev = 1;
+			fd2state[cur_peer]->ftype = FILE_DEVICE;
 		}
 		fd2state[cur_peer]->dev = cur_stat.st_dev;
 		fd2state[cur_peer]->ino = cur_stat.st_ino;
@@ -923,6 +922,10 @@ int lonely_http::GETPOST()
 		fd2state[cur_peer]->offset = cur_start_range;
 		fd2state[cur_peer]->copied = 0;
 		fd2state[cur_peer]->left = cur_end_range - cur_start_range;
+
+		// proc files always report size 0
+		if (fd2state[cur_peer]->ftype == FILE_PROC)
+			fd2state[cur_peer]->left = 1024;
 
 		if (download() < 0)
 			return -1;
