@@ -72,11 +72,15 @@ int rproxy::loop()
 		memset(&tv, 0, sizeof(tv));
 		memset(&tm, 0, sizeof(tm));
 		gettimeofday(&tv, NULL);
-		cur_time = tv.tv_sec;
-		localtime_r(&cur_time, &tm);
-		strftime(local_date, sizeof(local_date), "%a, %d %b %Y %H:%M:%S GMT%z", &tm);
-		gmtime_r(&cur_time, &tm);
-		strftime(gmt_date, sizeof(gmt_date), "%a, %d %b %Y %H:%M:%S GMT", &tm);
+
+		// optimization: only stringify time if at least 1s elapsed
+		if (cur_time != tv.tv_sec) {
+			cur_time = tv.tv_sec;
+			localtime_r(&cur_time, &tm);
+			strftime(local_date, sizeof(local_date), "%a, %d %b %Y %H:%M:%S GMT%z", &tm);
+			gmtime_r(&cur_time, &tm);
+			strftime(gmt_date, sizeof(gmt_date), "%a, %d %b %Y %H:%M:%S GMT", &tm);
+		}
 
 		// assert: pfds[i].fd == i
 		for (i = first_fd; i <= max_fd; ++i) {

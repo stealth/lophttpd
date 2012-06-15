@@ -330,13 +330,17 @@ int lonely_http::loop()
 		memset(&tv, 0, sizeof(tv));
 		memset(&tm, 0, sizeof(tm));
 		gettimeofday(&tv, NULL);
-		cur_time = tv.tv_sec;
-		cur_usec = tv.tv_usec;
 
-		localtime_r(&cur_time, &tm);
-		strftime(local_date, sizeof(local_date), "%a, %d %b %Y %H:%M:%S GMT%z", &tm);
-		gmtime_r(&cur_time, &tm);
-		strftime(gmt_date, sizeof(gmt_date), "%a, %d %b %Y %H:%M:%S GMT", &tm);
+		// optimization: only stringify time if at least 1s elapsed
+		if (cur_time != tv.tv_sec) {
+			cur_time = tv.tv_sec;
+			cur_usec = tv.tv_usec;
+
+			localtime_r(&cur_time, &tm);
+			strftime(local_date, sizeof(local_date), "%a, %d %b %Y %H:%M:%S GMT%z", &tm);
+			gmtime_r(&cur_time, &tm);
+			strftime(gmt_date, sizeof(gmt_date), "%a, %d %b %Y %H:%M:%S GMT", &tm);
+		}
 
 		for (i = first_fd; i <= max_fd; ++i) {
 
@@ -517,15 +521,18 @@ int lonely_http::send_genindex()
 
 int lonely_http::download()
 {
-	int r = 0, fd = open();
+	int r = 0, fd = fd2state[cur_peer]->fd;
+
 	if (fd < 0) {
-		// callers of download() must not send_error() themself on -1,
-		// as they cannot know whether a failure appeared before or after
-		// send_header() call. Thus download() sends its erros themself.
-		send_error(HTTP_ERROR_500);
-		err = "lonely_http::download::open:";
-		err += strerror(errno);
-		return -1;
+		if ((fd = open()) < 0) {
+			// callers of download() must not send_error() themself on -1,
+			// as they cannot know whether a failure appeared before or after
+			// send_header() call. Thus download() sends its erros themself.
+			send_error(HTTP_ERROR_500);
+			err = "lonely_http::download::open:";
+			err += strerror(errno);
+			return -1;
+		}
 	}
 
 	// send prefix header if nothing has been sent so far
@@ -852,6 +859,8 @@ int lonely_http::open()
 				file_cache[i] = fd;
 		}
 	}
+
+	fd2state[cur_peer]->fd = fd;
 	return fd;
 }
 
