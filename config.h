@@ -19,7 +19,7 @@ namespace httpd_config
 	extern uid_t user_uid, user_gid;
 	extern std::string host, port;
 	extern int cores, master, af;
-	extern size_t mss;
+	extern uint16_t mss;
 }
 
 

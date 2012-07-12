@@ -50,7 +50,7 @@ class webstress {
 
 public:
 	webstress(const string &h, const string &p, const string &f, bool seq = 0)
-		: host(h), port(p), path(f), err(""), sequential(seq), max_cl(1024),
+		: host(h), port(p), path(f), err(""), sequential(seq), max_cl(3024),
 		  peers(0), ever(0), ests(0), success(0), hdr_fail(0), write_fail(0), read_fail(0),
 	          to_fail(0), hup_fail(0), max_fd(0), pfds(NULL)
 	{
@@ -236,10 +236,10 @@ int webstress::loop()
 		if (poll(pfds, max_fd + 1, 10000) < 0)
 			continue;
 
-		now = time(NULL);
-
 		// starts at most at FD 3
 		for (int i = 3; i <= max_fd ; ++i) {
+			now = time(NULL);
+
 			if (!clients[i])
 				continue;
 			if (pfds[i].revents == 0 && now - clients[i]->time > TIMEOUT) {
@@ -339,8 +339,10 @@ int webstress::loop()
 				}
 				clients[i]->obtained += r;
 				if (clients[i]->obtained == clients[i]->content_length || r == 0) {
-					if (r != 0)
+					if (clients[i]->obtained == clients[i]->content_length)
 						++success;
+					else 
+						++read_fail;
 					print_stat(i);
 					cleanup(i);
 					continue;

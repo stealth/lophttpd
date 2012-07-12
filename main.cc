@@ -80,7 +80,7 @@ void help(const char *p)
 	    <<"\t\t -L : logprovider, default '"<<httpd_config::log_provider<<"'"<<endl
 	    <<"\t\t -B : <base> 'http://...' tag, if operating behind a proxy\n"
 	    <<"\t\t -q : quiet mode; don't generate any logs or index.html files\n"
-	    <<"\t\t -S : sendfile() chunksize (no need to change), default: "<<httpd_config::mss<<endl
+	    <<"\t\t -S : sendfile() chunksize (no need to change), default: "<<DEFAULT_SEND_SIZE<<endl
 	    <<"\t\t -U : upload dir inside web-root, default disabled"<<endl
 	    <<"\t\t -E : do not close connection on invalid requests, default disabled"<<endl
 	    <<"\t\t -Q : (implies -r) do not tell client the rand token (for write-only uploads)"<<endl
@@ -199,6 +199,9 @@ int main(int argc, char **argv)
 	tzset();
 	nice(-20);
 	close_fds();
+
+	if (httpd_config::mss == 0)
+		httpd_config::mss = DEFAULT_SEND_SIZE;
 
 	httpd = new (nothrow) lonely_http(httpd_config::mss);
 	if (!httpd) {

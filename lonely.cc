@@ -242,6 +242,9 @@ void lonely<state_engine>::cleanup(int fd)
 	pfds[fd].events = pfds[fd].revents = 0;
 	close(fd);
 
+	if (--n_clients < 0)
+		n_clients = 0;
+
 	if (fd2state[fd])
 		fd2state[fd]->cleanup();
 
@@ -323,6 +326,14 @@ int lonely_http::loop()
 	}
 
 	for (;;) {
+		if (n_clients > MANY_RECEIVERS && !forced_send_size) {
+			n_send = DEFAULT_SEND_SIZE - 128*(n_clients/MANY_RECEIVERS);
+			if (n_send < min_send || n_send > max_send)
+				n_send = min_send;
+		} else if (!forced_send_size) {
+			n_send = DEFAULT_SEND_SIZE;
+		}
+
 		// 0 means timeout which we also need to handle
 		if (poll(pfds, max_fd + 1, 3*1000) < 0)
 			continue;
@@ -344,8 +355,10 @@ int lonely_http::loop()
 
 		for (i = first_fd; i <= max_fd; ++i) {
 
-			if (heavy_load || (fd2state[i] && fd2state[i]->state == STATE_CLOSING)) {
-				if (cur_time - fd2state[i]->alive_time > TIMEOUT_CLOSING) {
+			// this check must come first, as pfds[i].fd is already -1 in
+			// STATE_CLOSING
+			if (fd2state[i] && fd2state[i]->state == STATE_CLOSING) {
+				if (heavy_load || (cur_time - fd2state[i]->alive_time > TIMEOUT_CLOSING)) {
 					cleanup(i);
 					continue;
 				}
@@ -420,6 +433,7 @@ int lonely_http::loop()
 
 					if (afd > max_fd)
 						max_fd = afd;
+					++n_clients;
 				}
 				// There is nothing more to do for the accept socket;
 				// just continue with the other sockets
@@ -542,8 +556,8 @@ int lonely_http::download()
 	}
 
 	size_t n = fd2state[cur_peer]->left;
-	if (n > mss)
-		n = mss;
+	if (n > n_send)
+		n = n_send;
 
 	r = flavor::sendfile(cur_peer, fd, &fd2state[cur_peer]->offset, // updated by sendfile
 	                     n,
@@ -660,7 +674,7 @@ int lonely_http::TRACE()
 
 int lonely_http::upload()
 {
-	char buf[mss];
+	char buf[n_send];
 	ssize_t n = 0;
 
 	// upload file fd is closed via cleanup() in STATE_UPLOADING

@@ -113,7 +113,7 @@ class lonely {
 protected:
 	struct pollfd *pfds;
 	int first_fd, max_fd;
-	int cur_peer;
+	int cur_peer, n_clients;
 	int af;
 	log_provider *logger;
 
@@ -134,7 +134,7 @@ protected:
 
 public:
 	lonely()
-	 : first_fd(0), max_fd(0), cur_peer(-1), logger(NULL), cur_time(0), cur_usec(0),
+	 : first_fd(0), max_fd(0), cur_peer(-1), n_clients(0), logger(NULL), cur_time(0), cur_usec(0),
 	   err(""), fd2state(NULL), heavy_load(0) {};
 
 	virtual ~lonely() { delete [] pfds; delete logger; };
@@ -187,6 +187,14 @@ enum {
 };
 
 
+enum {
+	MANY_RECEIVERS = 500,
+	MIN_SEND_SIZE = 64,
+	DEFAULT_SEND_SIZE = 1024,
+	MAX_SEND_SIZE = 4096
+};
+
+
 struct inode {
 	dev_t dev;
 	ino_t ino;
@@ -201,11 +209,12 @@ private:
 	struct stat cur_stat;
 	off_t cur_start_range;
 	size_t cur_end_range;
-	bool cur_range_requested;
+	bool cur_range_requested, forced_send_size;
 	http_request_t cur_request;
+
 	char hbuf[1024];		// header construction scratch store
 
-	size_t mss;
+	uint16_t min_send, n_send, max_send;
 
 	std::map<inode, int> file_cache;
 
@@ -251,13 +260,17 @@ private:
 public:
 	bool vhosts;
 
-	lonely_http(size_t s = 1024)
+	lonely_http(uint16_t s = DEFAULT_SEND_SIZE)
 	        : cur_start_range(0), cur_end_range(0),
-		  cur_range_requested(0), cur_request(HTTP_REQUEST_NONE),
-	          mss(s), vhosts(0)
+		  cur_range_requested(0), forced_send_size(0), cur_request(HTTP_REQUEST_NONE),
+	          min_send(MIN_SEND_SIZE), n_send(s), max_send(MAX_SEND_SIZE), vhosts(0)
 	{
-		if (mss > 0x10000)
-			mss = 0x10000;
+		if (n_send != DEFAULT_SEND_SIZE)
+			forced_send_size = 1;
+		if (n_send > max_send)
+			n_send = max_send;
+		if (n_send < min_send)
+			n_send = min_send;
 	}
 
 	virtual ~lonely_http() {}

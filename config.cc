@@ -25,7 +25,7 @@ namespace httpd_config
 	// on multicore there is only one master
 	int master = 1;
 
-	size_t mss = 1024;
+	uint16_t mss = 0;
 }
 
 
