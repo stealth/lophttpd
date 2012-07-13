@@ -50,6 +50,12 @@
 #define BLKGETSIZE64 _IOR(0x12,114,size_t)
 #endif
 
+extern "C" int ioctl(int, int, int *);
+
+#include <asm/ioctls.h>
+#include <linux/sockios.h>
+
+
 namespace flavor {
 
 using namespace ns_socket;
@@ -94,6 +100,14 @@ int device_size(const std::string &path, size_t &size)
 	close(fd);
 	errno = saved_errno;
 	return r;
+}
+
+
+int in_send_queue(int fd)
+{
+	int n = 0;
+	ioctl(fd, SIOCOUTQ, &n);
+	return n;
 }
 
 

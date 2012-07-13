@@ -49,8 +49,8 @@ class webstress {
 	static const int TIMEOUT = 60;
 
 public:
-	webstress(const string &h, const string &p, const string &f, bool seq = 0)
-		: host(h), port(p), path(f), err(""), sequential(seq), max_cl(3024),
+	webstress(const string &h, const string &p, const string &f, int max, bool seq = 0)
+		: host(h), port(p), path(f), err(""), sequential(seq), max_cl(max),
 		  peers(0), ever(0), ests(0), success(0), hdr_fail(0), write_fail(0), read_fail(0),
 	          to_fail(0), hup_fail(0), max_fd(0), pfds(NULL)
 	{
@@ -341,8 +341,8 @@ int webstress::loop()
 				if (clients[i]->obtained == clients[i]->content_length || r == 0) {
 					if (clients[i]->obtained == clients[i]->content_length)
 						++success;
-					else 
-						++read_fail;
+					else
+						++to_fail;
 					print_stat(i);
 					cleanup(i);
 					continue;
@@ -364,12 +364,16 @@ int webstress::loop()
 int main(int argc, char **argv)
 {
 
-	if (argc < 4) {
-		cerr<<"Usage: ws <host> <port> <path>\n";
+	if (argc < 5) {
+		cerr<<"Usage: ws <host> <port> <path> <#clients>\n";
 		return 1;
 	}
 
-	webstress ws(argv[1], argv[2], argv[3], 0);
+	if (atoi(argv[4]) < 20) {
+		cerr<<"Minimum of 20 clients";
+		return 1;
+	}
+	webstress ws(argv[1], argv[2], argv[3], atoi(argv[4]), 0);
 
 	if (ws.loop() < 0)
 		cerr<<ws.why()<<endl;

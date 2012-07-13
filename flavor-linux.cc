@@ -47,6 +47,9 @@
 #include "flavor.h"
 #include "lonely.h"
 
+#include <asm/ioctls.h>
+#include <linux/sockios.h>
+
 
 namespace flavor {
 
@@ -86,6 +89,14 @@ int device_size(const std::string &path, size_t &size)
 	close(fd);
 	errno = saved_errno;
 	return r;
+}
+
+
+int in_send_queue(int fd)
+{
+	int n = 0;
+	ioctl(fd, SIOCOUTQ, &n);
+	return n;
 }
 
 

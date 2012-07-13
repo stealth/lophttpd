@@ -65,7 +65,7 @@ void help(const char *p)
 {
 	cerr<<"Usage: "<<p<<" [-6] [-R web-root] [-B html-base-tag] [-iH] [-I IP] [-u user]\n"
 	    <<"\t\t [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n"
-	    <<"\t\t [-U upload] [-r] [-E] [-Q]\n\n"
+	    <<"\t\t [-U upload] [-r] [-E] [-Q] [-N n]\n\n"
 	    <<"\tcommonly used options:\n\n"
 	    <<"\t\t -R : web-root, default "<<httpd_config::root<<endl
 	    <<"\t\t -i : use autoindexing\n"
@@ -81,6 +81,7 @@ void help(const char *p)
 	    <<"\t\t -B : <base> 'http://...' tag, if operating behind a proxy\n"
 	    <<"\t\t -q : quiet mode; don't generate any logs or index.html files\n"
 	    <<"\t\t -S : sendfile() chunksize (no need to change), default: "<<DEFAULT_SEND_SIZE<<endl
+	    <<"\t\t -N : maximum number of accepted clients, default: "<<httpd_config::max_connections<<endl
 	    <<"\t\t -U : upload dir inside web-root, default disabled"<<endl
 	    <<"\t\t -E : do not close connection on invalid requests, default disabled"<<endl
 	    <<"\t\t -Q : (implies -r) do not tell client the rand token (for write-only uploads)"<<endl
@@ -130,7 +131,7 @@ int main(int argc, char **argv)
 		cerr<<"Continuing in UNSAFE mode!\n\n";
 	}
 
-	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQ")) != -1) {
+	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQN:")) != -1) {
 		switch (c) {
 		case '6':
 			httpd_config::host = "::0";
@@ -184,6 +185,9 @@ int main(int argc, char **argv)
 			break;
 		case 'E':
 			httpd_config::no_error_kill = 1;
+			break;
+		case 'N':
+			httpd_config::max_connections = strtoul(optarg, NULL, 10);
 			break;
 		case 'h':
 		default:

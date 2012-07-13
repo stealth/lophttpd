@@ -146,6 +146,9 @@ int lonely<state_engine>::init(const string &host, const string &port, int a)
 		return -1;
 	}
 
+	socklen_t olen = sizeof(so_sndbuf);
+	getsockopt(sock_fd, SOL_SOCKET, SO_SNDBUF, &so_sndbuf, &olen);
+
 	// allocate poll array
 	struct rlimit rl;
 	rl.rlim_cur = (1<<18);
@@ -242,8 +245,8 @@ void lonely<state_engine>::cleanup(int fd)
 	pfds[fd].events = pfds[fd].revents = 0;
 	close(fd);
 
-	if (--n_clients < 0)
-		n_clients = 0;
+	if (n_clients > 0)
+		--n_clients;
 
 	if (fd2state[fd])
 		fd2state[fd]->cleanup();
@@ -326,13 +329,6 @@ int lonely_http::loop()
 	}
 
 	for (;;) {
-		if (n_clients > MANY_RECEIVERS && !forced_send_size) {
-			n_send = DEFAULT_SEND_SIZE - 128*(n_clients/MANY_RECEIVERS);
-			if (n_send < min_send || n_send > max_send)
-				n_send = min_send;
-		} else if (!forced_send_size) {
-			n_send = DEFAULT_SEND_SIZE;
-		}
 
 		// 0 means timeout which we also need to handle
 		if (poll(pfds, max_fd + 1, 3*1000) < 0)
@@ -396,7 +392,7 @@ int lonely_http::loop()
 				pfds[i].events = POLLIN|POLLOUT;
 
 				int afd = 0;
-				for (;;) {
+				for (;n_clients < httpd_config::max_connections;) {
 					heavy_load = 0;
 					afd = flavor::accept(i, saddr, &slen, flavor::NONBLOCK);
 					if (afd < 0) {
@@ -406,6 +402,7 @@ int lonely_http::loop()
 						}
 						break;
 					}
+
 					pfds[afd].fd = afd;
 					pfds[afd].events = POLLIN;
 					pfds[afd].revents = 0;
@@ -554,6 +551,34 @@ int lonely_http::download()
 		if (send_http_header() < 0)
 			return -1;
 	}
+
+
+#ifndef STATIC_SEND_SIZE_COMPUTATION
+	int not_sent = flavor::in_send_queue(cur_peer);
+
+	if (!forced_send_size && n_clients > MANY_RECEIVERS) {
+		// send queue starts to fill?
+		if (not_sent == 0)
+			n_send = DEFAULT_SEND_SIZE;
+		else
+			n_send = min_send;
+
+		if (n_send > max_send)
+			n_send = max_send;
+		if (n_send < min_send)
+			n_send = min_send;
+
+		fd2state[cur_peer]->in_queue = not_sent;
+	}
+#else
+	if (!forced_send_size && n_clients > MANY_RECEIVERS) {
+		n_send = DEFAULT_SEND_SIZE - 128*(n_clients/MANY_RECEIVERS);
+		if (n_send < min_send || n_send > max_send)
+			n_send = min_send;
+	} else if (!forced_send_size) {
+		n_send = DEFAULT_SEND_SIZE;
+	}
+#endif
 
 	size_t n = fd2state[cur_peer]->left;
 	if (n > n_send)

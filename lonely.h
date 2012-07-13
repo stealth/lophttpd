@@ -79,14 +79,14 @@ struct http_state {
 	dev_t dev;
 	ino_t ino;
 	std::string path, from_ip;
-	int ct;
+	int ct, in_queue;
 	file_t ftype;
 	size_t blen;
 
 	http_state()
 	 : fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
-	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), from_ip(""), ct(0),
-	   ftype(FILE_REGULAR), blen(0) {};
+	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), from_ip(""),
+	   ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0) {};
 
 	// might be called twice, so no double-free's
 	void cleanup()
@@ -99,7 +99,7 @@ struct http_state {
 		keep_alive = 0;
 		alive_time = header_time = 0;
 		dev = ino = 0;
-		ct = 0;
+		ct = in_queue = 0;
 		ftype = FILE_REGULAR;
 		state = STATE_NONE;
 		path.clear(); from_ip.clear();
@@ -113,7 +113,8 @@ class lonely {
 protected:
 	struct pollfd *pfds;
 	int first_fd, max_fd;
-	int cur_peer, n_clients;
+	int cur_peer;
+	uint32_t n_clients;
 	int af;
 	log_provider *logger;
 
@@ -124,7 +125,7 @@ protected:
 	std::string err;
 	state_engine **fd2state;
 	bool heavy_load;
-
+	size_t so_sndbuf;
 
 	void cleanup(int);
 
@@ -135,7 +136,7 @@ protected:
 public:
 	lonely()
 	 : first_fd(0), max_fd(0), cur_peer(-1), n_clients(0), logger(NULL), cur_time(0), cur_usec(0),
-	   err(""), fd2state(NULL), heavy_load(0) {};
+	   err(""), fd2state(NULL), heavy_load(0), so_sndbuf(4096) {};
 
 	virtual ~lonely() { delete [] pfds; delete logger; };
 
@@ -263,7 +264,8 @@ public:
 	lonely_http(uint16_t s = DEFAULT_SEND_SIZE)
 	        : cur_start_range(0), cur_end_range(0),
 		  cur_range_requested(0), forced_send_size(0), cur_request(HTTP_REQUEST_NONE),
-	          min_send(MIN_SEND_SIZE), n_send(s), max_send(MAX_SEND_SIZE), vhosts(0)
+	          min_send(MIN_SEND_SIZE), n_send(s), max_send(MAX_SEND_SIZE),
+	          vhosts(0)
 	{
 		if (n_send != DEFAULT_SEND_SIZE)
 			forced_send_size = 1;

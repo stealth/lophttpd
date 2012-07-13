@@ -4,16 +4,46 @@ in general:
 
 - Increase value inside /proc/sys/net/core/somaxconn to have larger
   connection backlog queue (try 10000, this is what lhttpd will use)
+  On FreeBSD thats 'sysctl -w kern.ipc.somaxconn=10000'
+
 - have the logfile's on a different HDD than the webroot
+
 - If firewall policy allows, mark HTTP traffic as not-conntracked:
   iptables -t raw -A PREROUTING -p tcp --dport 80 -j NOTRACK
+
 - Whenever possible use the "mmap" log provider, it really rocks.
   (it requires the logfiles to be MB aligned, so you may need to remove
    them first if you previously didnt use the mmap provider)
+
 - split large directories (dirs containing like 100k files) into smaller ones
   if you use autoindexing, as most web browsers cannot render large tables fastly
+
 - If you have large bandwidth and a lot of connections, consider to increase your
   TCP send buffers via /proc/sys/net/ipv4/tcp_wmem (min, default, max)
+
 - for a large BDP, consider using tcp-westwood or other congestion avoidance algorithms
   (modprobe tcp_weswood and tune /proc/sys/net/ipv4/tcp_*)
+
+- You can experiment with lophttpd's send-size scheduling algorithms by
+  enabling -DSTATIC_SEND_SIZE_COMPUTATION compile time switch. This will decrease
+  the chunksize of sendfile() by 128 Bytes for each N-clients/MANY_RECEIVERS.
+  MANY_RECEIVERS can be tuned too at compile time (enum). The chunksize will never
+  be less than 64 and never be larger than 4096.
+  By default, lophttpd will check the currents socket sendqueue and will decrease
+  the chunksize if its still filled from the last send.
+  However, if you have ~10k simulteanous connections and quite slow downlink,
+  -DSTATIC_SEND_SIZE_COMPUTATION might be helpful since smaller files are still
+  delivered smoothly.
+  You can always force a chunksize via -S switch (other than 1024), which will not be re-calculated
+  by lophttpd, in case you found a value that perfectly fits into your network.
+
+- The default number of maximum allowed parallel connections is set to 10,000 (per core).
+  If you experiance some DoS which tries to exceed that, you can always increase it via -N,
+  so that it would be hard to reach from DSL uplinks. However if just the attackers
+  uplink is large enough, he can DoS any web server. Thats known and should be prevented
+  on the border router. If you have smaller files to deliver (some KB) its hard to DoS you,
+  if you deliver MB sized files, its easier, as even legit connections last longer and
+  keep the -N parameter high.
+  In such cases you should consider traffic shaping for dedicated IP networks.
+  Netfilter is your friend.
 

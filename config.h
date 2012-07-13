@@ -20,6 +20,7 @@ namespace httpd_config
 	extern std::string host, port;
 	extern int cores, master, af;
 	extern uint16_t mss;
+	extern uint32_t max_connections;
 }
 
 

@@ -26,6 +26,7 @@ namespace httpd_config
 	int master = 1;
 
 	uint16_t mss = 0;
+	uint32_t max_connections = 10000;
 }
 
 

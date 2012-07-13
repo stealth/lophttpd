@@ -95,6 +95,14 @@ int device_size(const std::string &path, size_t &size)
 }
 
 
+int in_send_queue(int peer)
+{
+	int n = 0;
+	ioctl(peer, FIONWRITE, &n);
+	return n;
+}
+
+
 int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, int ftype)
 {
 	off_t sbytes = 0;
