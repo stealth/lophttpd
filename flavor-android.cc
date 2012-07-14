@@ -50,8 +50,6 @@
 #define BLKGETSIZE64 _IOR(0x12,114,size_t)
 #endif
 
-extern "C" int ioctl(int, int, int *);
-
 #include <asm/ioctls.h>
 #include <linux/sockios.h>
 

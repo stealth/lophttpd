@@ -553,6 +553,9 @@ int lonely_http::download()
 	}
 
 
+	if (!forced_send_size)
+		n_send = DEFAULT_SEND_SIZE;
+
 #ifndef STATIC_SEND_SIZE_COMPUTATION
 	int not_sent = flavor::in_send_queue(cur_peer);
 
@@ -575,8 +578,6 @@ int lonely_http::download()
 		n_send = DEFAULT_SEND_SIZE - 128*(n_clients/MANY_RECEIVERS);
 		if (n_send < min_send || n_send > max_send)
 			n_send = min_send;
-	} else if (!forced_send_size) {
-		n_send = DEFAULT_SEND_SIZE;
 	}
 #endif
 
