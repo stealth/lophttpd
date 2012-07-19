@@ -7,8 +7,8 @@ http://github.com/stealth/lophttpd
 
 
 lophttpd was written to demonstrate (to myself) that it is possible
-to have a webserver running in a single thread and handling multiple
-connections at the same time. The ammount of connections is only limited by the
+to have a web-server running in a single thread and handling multiple
+connections at the same time. The amount of connections is only limited by the
 OS's maximum number of open files per process and by your CPU/network
 speed.
 
@@ -18,19 +18,19 @@ using 70% CPU on an average sized machine (tested on a core i5).
 Scheduling of connections is done in user-space by lophttpd. It uses
 sendfile(2) call and caching to get its good download performance.
 
-lophttpd can be used to serv heavy loaded sites to deliver static content:
+lophttpd can be used to serve heavy loaded sites to deliver static content:
 To serve software/package repositories, update servers, content delivery
-networks, ISO's, large image and video databases, tarballs etc.
+networks, ISO's, large image and video databases, tar-balls etc.
 
 Features:
 
 + runs as unprived user in a chroot
 + IPv6 ready
 + does not require syslogd
-+ supports multiple logproviders ("mmap" is very fast)
++ supports multiple log-providers ("mmap" is very fast)
 + only handles static content (e.g. no CGI scripts etc)
 + runs in a single process
-+ multicore support for Linux
++ multi-core support for Linux
 + integrated auto indexing support
 + integrated vhost support
 + can operate behind reverse proxy with -B
@@ -40,13 +40,13 @@ Features:
 
 
 You should run lophttpd as root. Then it chroots itself to the
-"-R" parameter given on the commandline and drops the privileges
+"-R" parameter given on the command-line and drops the privileges
 to that of the user given via "-u". It runs on port "-p".
-If you add "-i" to the commandline, it generates an index file
+If you add "-i" to the command-line, it generates an index file
 (in memory) for the web-root recursively. The user specified via -u
-must have the permissions to walk the webroot, otherwise
+must have the permissions to walk the web-root, otherwise
 you will get wrong results. If you use "-i", you probably want
-to copy the icons/ directory to your webroot, to have a pretty
+to copy the icons/ directory to your web-root, to have a pretty
 output. The icons are not by me, I grabbed them from some distro
 and they seem to be public domain.
 
@@ -57,8 +57,8 @@ For every vhost you need to create a subdir of name
  vhost<vhost-name>[:vhost-port]
 
 If port is 80 it should be omitted. For example if you
-have a vhost 127.0.0.1:8080 and your webroot is /srv/www/htdocs
-and you want to use autoindexing, create the subdir
+have a vhost 127.0.0.1:8080 and your web-root is /srv/www/htdocs
+and you want to use auto-indexing, create the subdir
 
  vhost127.0.0.1:8080
 
@@ -72,24 +72,24 @@ lophttpd will serve this as a vhost as long as your DNS resolves
 to the IP address where lophttpd is running.
 
 Default log-location is /var/log/lophttpd. If you change this, take care
-that your logfile is located outside the chroot cage.
+that your log-file is located outside the chroot cage.
 
 You can run lophttpd as normal user on a port >= 1024, but this is INSECURE!
 It does not drop privs/chroot then. The aim is to quickly exchange some
-ISO's or tarballs in a separated, secure LAN between friends.
+ISO's or tar-balls in a separated, secure LAN between friends.
 
-If you change something in the webroot while lophttpd is running,
-e.g. you use autoindexing and copy new files to webroot or
+If you change something in the web-root while lophttpd is running,
+e.g. you use auto-indexing and copy new files to web-root or
 delete files from there, you need to tell lophttpd by sending
 it a SIGUSR1 signal. It will drop its open file caches and
 generates new indexes.
 
-If lhttpd experiances that the generated indexes exceed a certain limit,
+If lhttpd experiences that the generated indexes exceed a certain limit,
 (default 10,000 bytes per dir) it writes the appropriate index.html to disk
-inside the directory. It wont overwrite exising files. But creation of
+inside the directory. It wont overwrite existing files. But creation of
 large index files makes sense, otherwise it would need to keep 100's
-of MB inside RAM. Since lhttpd is walking the webroot as root when
-generating the index, take care that users dont create large FS-trees
+of MB inside RAM. Since lhttpd is walking the web-root as root when
+generating the index, take care that users don't create large FS-trees
 so that lhttpd is forced to generate junk.
 Generating indexes for large directories, containing 100k of files, can
 take some time. If the "-q" parameter is passed, generated indexes
@@ -104,35 +104,35 @@ be a bottleneck, lophttpd introduces different log providers
 which you can choose via -L.
 By default it is "file" which means the normal behavior. You can
 also say "mmap". Then it is using a mmap-backed buffer which speeds
-up logging. "aio" is also spupported which uses the POSIX realtime
+up logging. "aio" is also supported which uses the POSIX real-time
 aio_ calls. However this could lead to drops of messages if
 under very heavy load. Remember that lophttpd is still single threaded,
 even with different log providers. (For aio to be really
 single threaded you may want to check out my Linux aio implementation
 since glibc is using pthreads under the hood.)
 
-Since version 0.86 lophttpd supports multicore setups for Linux.
+Since version 0.86 lophttpd supports multi-core setups for Linux.
 If run without any -n switch, lophttpd will run one process per core.
 You can turn this off by using "-n 1" or you specify the number
 of cores you want lophttpd to use. In general, "-n 1" is a good idea,
 since even if under heavy load, you rarely need more than one core
 for lophttpd.
 
-Since version 0.88 lophttpd has one logfile per core. If you run on two
+Since version 0.88 lophttpd has one log-file per core. If you run on two
 cores you get "logfile.0" and "logfile.1". This way we avoid file locking.
-lophttpd is now also using localtime instead of gmtime in the logs,
+lophttpd is now also using local-time instead of gmtime in the logs,
 so take care to have the right TZ environment variable set when starting
 lhttpd or it will use UTC.
 
-If you use multicore support, every process will have its own cache
+If you use multi-core support, every process will have its own cache
 for open files and stats. Do not run lhttpd on large read-only directories w/o
-index.html and autoindexing since it needs to keep a big cache about
+index.html and auto-indexing since it needs to keep a big cache about
 indexing information in memory then (per core!). This does not happen
 if the directory is writable since lophttpd will dump content into a
 index.html file if above a certain threshold.
 
 Since version > 0.91 lophttpd also supports IPv6, by simply using "-6"
-commandline switch. The default bind goes to "::0" then, so
+command-line switch. The default bind goes to "::0" then, so
 if you want to bind to a specific IPv6 address, you have to
 add -I switch *after* -6. You can either run IPv4 or IPv6 in once
 instance, not both. But you can run two lophttpd's: one with IPv4
@@ -151,7 +151,7 @@ if running as root) but its sometimes useful on embedded devices.
 
 As well as device files, lophttpd can serve /proc or /sys file systems.
 !!! Be aware about the security consequences and that you sometimes will
-get wrong resuls (proc/<pid> dirs come and go) !!!
+get wrong results (proc/<pid> dirs come and go) !!!
 
 Please note that serving /proc, /sys and device files is a special
 operation mode and not optimized for thousands of clients (although
@@ -174,7 +174,7 @@ Lophttpd supports file upload (via PUT method) directly, w/o the need
 for external CGI scripts or alike.
 
 On the machine running lophttpd, you have to create a directory
-named 'upload' _inside the webroot_ (and inside your vHost setup if any),
+named 'upload' _inside the web-root_ (and inside your vHost setup if any),
 which must be owned by the user you run lhttpd as (e.g. 'wwwrun'). Then
 start lhttpd like:
 
@@ -184,11 +184,11 @@ On client side:
 
 $ curl --upload-file /path/to/file http://lophttpd.host:port
 
-Then, the file is transfered to $WEBROOT/upload/file. If you additionally
+Then, the file is transferred to $WEBROOT/upload/file. If you additionally
 start lhttpd with '-r', a random token is appended to the file when its stored.
 If you put an empty index.html inside 'upload', outside visitors cannot
 download the uploaded file, as they do not know the URL. If you want that
-nobody, not even the uploader can see the URL, you can use '-Q'.
+nobody, not even the up-loader can see the URL, you can use '-Q'.
 This effectively creates you an upload-only service where you can store
 submitted documents which nobody can download.
 

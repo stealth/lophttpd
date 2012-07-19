@@ -6,17 +6,20 @@ in general:
   connection backlog queue (try 10000, this is what lhttpd will use)
   On FreeBSD thats 'sysctl -w kern.ipc.somaxconn=10000'
 
-- have the logfile's on a different HDD than the webroot
+- have the logfile's on a different HDD than the web-root
 
 - If firewall policy allows, mark HTTP traffic as not-conntracked:
   iptables -t raw -A PREROUTING -p tcp --dport 80 -j NOTRACK
+  iptables -t raw -A OUTPUT -p tcp --sport 80 -j NOTRACK
+
+  This really buys you connection performance.
 
 - Whenever possible use the "mmap" log provider, it really rocks.
-  (it requires the logfiles to be MB aligned, so you may need to remove
-   them first if you previously didnt use the mmap provider)
+  (it requires the log-files to be MB aligned, so you may need to remove
+   them first if you previously didn't use the mmap provider)
 
 - split large directories (dirs containing like 100k files) into smaller ones
-  if you use autoindexing, as most web browsers cannot render large tables fastly
+  if you use auto-indexing, as most web browsers cannot render large tables fastly
 
 - If you have large bandwidth and a lot of connections, consider to increase your
   TCP send buffers via /proc/sys/net/ipv4/tcp_wmem (min, default, max)
@@ -26,21 +29,22 @@ in general:
 
 - You can experiment with lophttpd's send-size scheduling algorithms by
   enabling -DSTATIC_SEND_SIZE_COMPUTATION compile time switch. This will decrease
-  the chunksize of sendfile() by 128 Bytes for each N-clients/MANY_RECEIVERS.
-  MANY_RECEIVERS can be tuned too at compile time (enum). The chunksize will never
+  the chunk-size of sendfile() by 128 Bytes for each N-clients/MANY_RECEIVERS.
+  MANY_RECEIVERS can be tuned too at compile time (enum). The chunk-size will never
   be less than 64 and never be larger than 4096.
-  By default, lophttpd will check the currents socket sendqueue and will decrease
-  the chunksize if its still filled from the last send.
-  However, if you have ~10k simulteanous connections and quite slow downlink,
+  By default, lophttpd will check the currents socket send-queue and will decrease
+  the chunk-size if its still filled from the last send.
+  However, if you have ~10k parallel connections and quite slow down-link,
   -DSTATIC_SEND_SIZE_COMPUTATION might be helpful since smaller files are still
   delivered smoothly.
-  You can always force a chunksize via -S switch (other than 1024), which will not be re-calculated
-  by lophttpd, in case you found a value that perfectly fits into your network.
+  You can always force a chunk-size via -S switch (other than 1024), which will not
+  be re-calculated by lophttpd, in case you found a value that perfectly fits into
+  your network.
 
 - The default number of maximum allowed parallel connections is set to 10,000 (per core).
-  If you experiance some DoS which tries to exceed that, you can always increase it via -N,
-  so that it would be hard to reach from DSL uplinks. However if just the attackers
-  uplink is large enough, he can DoS any web server. Thats known and should be prevented
+  If you experience some DoS which tries to exceed that, you can always increase it via -N,
+  so that it would be hard to reach from DSL up-links. However if just the attackers
+  up-link is large enough, he can DoS any web server. Thats known and should be prevented
   on the border router. If you have smaller files to deliver (some KB) its hard to DoS you,
   if you deliver MB sized files, its easier, as even legit connections last longer and
   keep the -N parameter high.
