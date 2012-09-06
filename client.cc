@@ -45,7 +45,7 @@ using namespace ns_socket;
 // might be called twice, so no double-free's
 void http_client::cleanup()
 {
-	if (state == STATE_UPLOADING)
+	if (d_state == STATE_UPLOADING)
 		close(file_fd);
 	file_fd = -1;
 	peer_fd = -1;
@@ -56,7 +56,7 @@ void http_client::cleanup()
 	dev = ino = 0;
 	ct = in_queue = 0;
 	ftype = FILE_REGULAR;
-	state = STATE_NONE;
+	d_state = STATE_NONE;
 	path.clear(); from_ip.clear();
 	blen = 0;
 }
@@ -93,7 +93,7 @@ int http_client::peek(void *buf, size_t n)
 void rproxy_client::cleanup()
 {
 	fd = peer_fd = -1;
-	state = STATE_NONE;
+	d_state = STATE_NONE;
 	type = HTTP_NONE;
 	node.host.clear(); node.path.clear(); opath.clear(); from_ip.clear();
 	blen = chunk_len = 0;

@@ -193,7 +193,7 @@ int lonely<state_engine>::init(const string &host, const string &port, int a)
 	pfds[sock_fd].events = POLLIN|POLLOUT;
 
 	fd2peer[sock_fd] = new state_engine;
-	fd2peer[sock_fd]->state = STATE_ACCEPTING;
+	fd2peer[sock_fd]->transition(STATE_ACCEPTING);
 	fd2peer[sock_fd]->keep_alive = 1;
 	fd2peer[sock_fd]->peer_fd = sock_fd;
 
@@ -215,17 +215,17 @@ void lonely<state_engine>::shutdown(int fd)
 		return;
 
 	// might be called twice or again after close() if peer has an issue
-	if (fd2peer[fd]->state == STATE_CLOSING || fd2peer[fd]->state == STATE_NONE)
+	if (fd2peer[fd]->state() == STATE_CLOSING || fd2peer[fd]->state() == STATE_NONE)
 		return;
 
-	if (fd2peer[fd]->state == STATE_UPLOADING) {
+	if (fd2peer[fd]->state() == STATE_UPLOADING) {
 		close(fd2peer[fd]->peer_fd);
 		fd2peer[fd]->peer_fd = -1;
 	}
 
 	::shutdown(fd, SHUT_RDWR);
 
-	fd2peer[fd]->state = STATE_CLOSING;
+	fd2peer[fd]->transition(STATE_CLOSING);
 	fd2peer[fd]->blen = 0;
 
 	pfds[fd].fd = -1;
@@ -263,7 +263,7 @@ void lonely<state_engine>::calc_max_fd()
 {
 	// find the highest fd that is in use
 	for (int i = max_fd; i >= first_fd; --i) {
-		if (fd2peer[i] && fd2peer[i]->state != STATE_NONE) {
+		if (fd2peer[i] && fd2peer[i]->state() != STATE_NONE) {
 			max_fd = i;
 			return;
 		}
@@ -356,7 +356,7 @@ int lonely_http::loop()
 
 			// this check must come first, as pfds[i].fd is already -1 in
 			// STATE_CLOSING
-			if (fd2peer[i] && fd2peer[i]->state == STATE_CLOSING) {
+			if (fd2peer[i] && fd2peer[i]->state() == STATE_CLOSING) {
 				if (heavy_load || (cur_time - fd2peer[i]->alive_time > TIMEOUT_CLOSING)) {
 					cleanup(i);
 					continue;
@@ -365,14 +365,14 @@ int lonely_http::loop()
 
 			if (pfds[i].fd == -1)
 				continue;
-			if (!fd2peer[i] || fd2peer[i]->state == STATE_NONE)
+			if (!fd2peer[i] || fd2peer[i]->state() == STATE_NONE)
 				continue;
 
 			peer = fd2peer[i];
 			peer_idx = i;
 
 			// more than 30s no data?! But don't time out accept socket.
-			if (peer->state != STATE_ACCEPTING &&
+			if (peer->state() != STATE_ACCEPTING &&
 			    cur_time - peer->alive_time > TIMEOUT_ALIVE) {
 				cleanup(i);
 				continue;
@@ -392,7 +392,7 @@ int lonely_http::loop()
 			// be here if revents would be 0
 
 			// new connection ready to accept?
-			if (peer->state == STATE_ACCEPTING) {
+			if (peer->state() == STATE_ACCEPTING) {
 				pfds[i].revents = 0;
 				pfds[i].events = POLLIN|POLLOUT;
 
@@ -423,7 +423,7 @@ int lonely_http::loop()
 						}
 					}
 
-					fd2peer[afd]->state = STATE_CONNECTED;
+					fd2peer[afd]->transition(STATE_CONNECTED);
 					fd2peer[afd]->alive_time = cur_time;
 					fd2peer[afd]->peer_fd = afd;
 
@@ -441,17 +441,17 @@ int lonely_http::loop()
 				// There is nothing more to do for the accept socket;
 				// just continue with the other sockets
 				continue;
-			} else if (peer->state == STATE_CONNECTED) {
+			} else if (peer->state() == STATE_CONNECTED) {
 				if (handle_request() < 0) {
 					cleanup(i);
 					continue;
 				}
-			} else if (peer->state == STATE_DOWNLOADING) {
+			} else if (peer->state() == STATE_DOWNLOADING) {
 				if (download() < 0) {
 					cleanup(i);
 					continue;
 				}
-			} else if (peer->state == STATE_UPLOADING) {
+			} else if (peer->state() == STATE_UPLOADING) {
 				if (upload() < 0) {
 					cleanup(i);
 					continue;
@@ -461,14 +461,14 @@ int lonely_http::loop()
 			// do not glue together the above and below if()'s because
 			// download() may change state so we need a 2nd state-engine walk
 
-			if (peer->state == STATE_DOWNLOADING) {
+			if (peer->state() == STATE_DOWNLOADING) {
 				pfds[i].events = POLLOUT;
-			} else if (peer->state == STATE_UPLOADING) {
+			} else if (peer->state() == STATE_UPLOADING) {
 				pfds[i].events = POLLIN;
-			} else if (peer->state == STATE_CONNECTED)
+			} else if (peer->state() == STATE_CONNECTED)
 				pfds[i].events = POLLIN;
 
-			if (!peer->keep_alive && peer->state == STATE_CONNECTED)
+			if (!peer->keep_alive && peer->state() == STATE_CONNECTED)
 				shutdown(i);
 
 			pfds[i].revents = 0;
@@ -598,15 +598,15 @@ int lonely_http::download()
 		r = 1;
 
 	if (r < 0) {
-		peer->state = STATE_CONNECTED;
+		peer->transition(STATE_CONNECTED);
 		peer->keep_alive = 0;
 		return -1;
 	} else if (peer->left == 0) {
 		//close(pf.fd); Do not close, due to caching
-		peer->state = STATE_CONNECTED;
+		peer->transition(STATE_CONNECTED);
 		peer->header_time = 0;
 	} else {
-		peer->state = STATE_DOWNLOADING;
+		peer->transition(STATE_DOWNLOADING);
 	}
 
 	return 0;
@@ -726,7 +726,7 @@ int lonely_http::upload()
 		peer->send(html.c_str(), html.size());
 
 		close(peer->file_fd);
-		peer->state = STATE_CONNECTED;
+		peer->transition(STATE_CONNECTED);
 		peer->keep_alive = 0;
 	}
 
@@ -763,7 +763,7 @@ int lonely_http::PUT()
 		return send_error(HTTP_ERROR_400);
 
 	peer->file_fd = fd;
-	peer->state = STATE_UPLOADING;
+	peer->transition(STATE_UPLOADING);
 	return 0;
 }
 
@@ -784,7 +784,7 @@ void lonely_http::clear_cache()
 	// do not close files in transfer
 	for (int i = 0; i <= max_fd; ++i) {
 		if (fd2peer[i]) {
-			if (fd2peer[i]->state == STATE_DOWNLOADING) {
+			if (fd2peer[i]->state() == STATE_DOWNLOADING) {
 				inode ino = {fd2peer[i]->dev, fd2peer[i]->ino};
 				dont_close[ino] = 1;
 			}

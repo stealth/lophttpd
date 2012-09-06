@@ -86,7 +86,7 @@ int rproxy::loop()
 		// assert: pfds[i].fd == i
 		for (i = first_fd; i <= max_fd; ++i) {
 
-			if (fd2peer[i] && fd2peer[i]->state == STATE_CLOSING) {
+			if (fd2peer[i] && fd2peer[i]->state() == STATE_CLOSING) {
 				if (heavy_load || cur_time - fd2peer[i]->alive_time > TIMEOUT_CLOSING) {
 					cleanup(i);
 					continue;
@@ -105,8 +105,8 @@ int rproxy::loop()
 			// timeout hanging connections (with pending data) but not accepting
 			// socket
 			if (cur_time - peer->alive_time >= TIMEOUT_ALIVE &&
-			    peer->state != STATE_ACCEPTING &&
-			    (peer->blen > 0 || peer->state == STATE_DECIDING)) {
+			    peer->state() != STATE_ACCEPTING &&
+			    (peer->blen > 0 || peer->state() == STATE_DECIDING)) {
 
 				// always call fd and its peer in pairs: cleanup() + cleanup() or
 				// shutdown() + cleanup(). Otherwise re-used fd's can make troubles.
@@ -129,7 +129,7 @@ int rproxy::loop()
 				continue;
 
 			// new connection ready to accept?
-			if (peer->state == STATE_ACCEPTING) {
+			if (peer->state() == STATE_ACCEPTING) {
 				pfds[i].revents = 0;
 				for (;;) {
 					heavy_load = 0;
@@ -159,7 +159,7 @@ int rproxy::loop()
 
 					fd2peer[afd]->from_ip = from;
 					fd2peer[afd]->fd = afd;
-					fd2peer[afd]->state = STATE_DECIDING;
+					fd2peer[afd]->transition(STATE_DECIDING);
 					fd2peer[afd]->alive_time = cur_time;
 
 					pfds[i].events = POLLOUT|POLLIN;
@@ -168,7 +168,7 @@ int rproxy::loop()
 						max_fd = afd;
 				}
 				continue;
-			} else if (peer->state == STATE_DECIDING) {
+			} else if (peer->state() == STATE_DECIDING) {
 					// Also in DECIDING state, there might be response from server
 					// to be sent to client
 					if (pfds[i].revents & POLLOUT) {
@@ -221,7 +221,7 @@ int rproxy::loop()
 						peer->peer_fd = peer_fd;
 					}
 
-					peer->state = STATE_CONNECTED;
+					peer->transition(STATE_CONNECTED);
 					peer->alive_time = cur_time;
 					peer->type = HTTP_CLIENT;
 					peer->header = 0;
@@ -240,7 +240,7 @@ int rproxy::loop()
 					if (!same_conn) {
 						fd2peer[peer_fd]->fd = peer_fd;
 						fd2peer[peer_fd]->peer_fd = i;
-						fd2peer[peer_fd]->state = STATE_CONNECTING;
+						fd2peer[peer_fd]->transition(STATE_CONNECTING);
 						fd2peer[peer_fd]->type = HTTP_SERVER;
 					}
 
@@ -258,7 +258,7 @@ int rproxy::loop()
 
 					if (peer_fd > max_fd)
 						max_fd = peer_fd;
-			} else if (fd2peer[i]->state == STATE_CONNECTING) {
+			} else if (fd2peer[i]->state() == STATE_CONNECTING) {
 				if (finish_connecting(i) < 0) {
 					err = "rproxy::loop::";
 					err += ns_socket::why();
@@ -267,18 +267,18 @@ int rproxy::loop()
 					// log
 					continue;
 				}
-				peer->state = STATE_CONNECTED;
+				peer->transition(STATE_CONNECTED);
 				peer->alive_time = cur_time;
 
 				// POLLOUT too, since mangle_request_header() already slurped data
 				// from client
 				pfds[i].events = POLLIN|POLLOUT;
 				pfds[i].revents = 0;
-			} else if (fd2peer[i]->state == STATE_CONNECTED) {
+			} else if (fd2peer[i]->state() == STATE_CONNECTED) {
 
 				// peer not ready yet
 				if (!fd2peer[peer->peer_fd] ||
-				    fd2peer[peer->peer_fd]->state == STATE_CONNECTING) {
+				    fd2peer[peer->peer_fd]->state() == STATE_CONNECTING) {
 					pfds[i].revents = 0;
 					continue;
 				}
@@ -357,7 +357,7 @@ ssize_t rproxy::more_client_bytes()
 	// already slurped in whole request?
 	if (peer->chunk_len == 0) {
 		peer->header = 1;
-		peer->state = STATE_DECIDING;
+		peer->transition(STATE_DECIDING);
 		peer->alive_time = cur_time;
 		peer->header_time = 0;
 		return 0;
@@ -377,7 +377,7 @@ ssize_t rproxy::more_client_bytes()
 	peer->chunk_len -= r;
 	if (peer->chunk_len == 0) {
 		peer->header = 1;
-		peer->state = STATE_DECIDING;
+		peer->transition(STATE_DECIDING);
 		peer->header_time = 0;
 	}
 

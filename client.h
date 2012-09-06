@@ -64,9 +64,10 @@ typedef enum {
 
 
 class http_client {
+private:
+	status_t d_state;
 public:
 	int file_fd, peer_fd;
-	status_t state;
 	time_t alive_time, header_time;
 	bool keep_alive;
 	off_t offset;
@@ -79,7 +80,7 @@ public:
 	size_t blen;
 
 	http_client()
-	 : file_fd(-1), peer_fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
+	 : d_state(STATE_ERROR), file_fd(-1), peer_fd(-1), alive_time(0), header_time(0),
 	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), from_ip(""),
 	   ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0) {};
 
@@ -94,6 +95,10 @@ public:
 	int recv(void *, size_t);
 
 	int peek(void *, size_t);
+
+	status_t state() const { return d_state; };
+
+	void transition(status_t s) { d_state = s; };
 };
 
 
@@ -107,9 +112,10 @@ typedef enum {
 
 
 class rproxy_client {
+private:
+	status_t d_state;
 public:
 	int fd, peer_fd, keep_alive;
-	status_t state;
 	time_t alive_time, header_time;
 	off_t offset;
 	struct rproxy_config::backend node;
@@ -122,13 +128,17 @@ public:
 	http_instance_t type;
 
 	rproxy_client()
-	 : fd(-1), peer_fd(-1), keep_alive(0), state(STATE_ERROR), alive_time(0), header_time(0),
+	 : d_state(STATE_ERROR), fd(-1), peer_fd(-1), keep_alive(0), alive_time(0), header_time(0),
 	   opath(""), from_ip(""), blen(0),
 	   chunk_len(0), header(1), chunked(0), type(HTTP_NONE) {};
 
 	~rproxy_client() {};
 
 	void cleanup();
+
+	status_t state() const { return d_state; };
+
+	void transition(status_t s) { d_state = s; };
 };
 
 
