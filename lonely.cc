@@ -59,6 +59,7 @@
 #include "misc.h"
 #include "socket.h"
 #include "flavor.h"
+#include "client.h"
 
 
 using namespace std;
@@ -169,12 +170,12 @@ int lonely<state_engine>::init(const string &host, const string &port, int a)
 	int flags = fcntl(sock_fd, F_GETFL);
 	fcntl(sock_fd, F_SETFL, flags|O_NONBLOCK);
 
-	fd2state = new (nothrow) state_engine*[rl.rlim_cur];
-	if (!fd2state) {
+	fd2peer = new (nothrow) state_engine*[rl.rlim_cur];
+	if (!fd2peer) {
 		err = "loneley::init::OOM";
 		return -1;
 	}
-	memset(fd2state, 0, rl.rlim_cur*sizeof(state_engine *));
+	memset(fd2peer, 0, rl.rlim_cur*sizeof(state_engine *));
 
 	pfds = new (nothrow) pollfd[rl.rlim_cur];
 	if (!pfds) {
@@ -191,9 +192,10 @@ int lonely<state_engine>::init(const string &host, const string &port, int a)
 	pfds[sock_fd].fd = sock_fd;
 	pfds[sock_fd].events = POLLIN|POLLOUT;
 
-	fd2state[sock_fd] = new state_engine;
-	fd2state[sock_fd]->state = STATE_ACCEPTING;
-	fd2state[sock_fd]->keep_alive = 1;
+	fd2peer[sock_fd] = new state_engine;
+	fd2peer[sock_fd]->state = STATE_ACCEPTING;
+	fd2peer[sock_fd]->keep_alive = 1;
+	fd2peer[sock_fd]->peer_fd = sock_fd;
 
 
 	struct sigaction sa;
@@ -209,22 +211,22 @@ void lonely<state_engine>::shutdown(int fd)
 {
 	if (fd < 0)
 		return;
-	if (!fd2state[fd])
+	if (!fd2peer[fd])
 		return;
 
 	// might be called twice or again after close() if peer has an issue
-	if (fd2state[fd]->state == STATE_CLOSING || fd2state[fd]->state == STATE_NONE)
+	if (fd2peer[fd]->state == STATE_CLOSING || fd2peer[fd]->state == STATE_NONE)
 		return;
 
-	if (fd2state[fd]->state == STATE_UPLOADING) {
-		close(fd2state[fd]->fd);
-		fd2state[fd]->fd = -1;
+	if (fd2peer[fd]->state == STATE_UPLOADING) {
+		close(fd2peer[fd]->peer_fd);
+		fd2peer[fd]->peer_fd = -1;
 	}
 
 	::shutdown(fd, SHUT_RDWR);
 
-	fd2state[fd]->state = STATE_CLOSING;
-	fd2state[fd]->blen = 0;
+	fd2peer[fd]->state = STATE_CLOSING;
+	fd2peer[fd]->blen = 0;
 
 	pfds[fd].fd = -1;
 	pfds[fd].events = pfds[fd].revents = 0;
@@ -248,8 +250,8 @@ void lonely<state_engine>::cleanup(int fd)
 	if (n_clients > 0)
 		--n_clients;
 
-	if (fd2state[fd])
-		fd2state[fd]->cleanup();
+	if (fd2peer[fd])
+		fd2peer[fd]->cleanup();
 
 	if (max_fd == fd)
 		--max_fd;
@@ -261,7 +263,7 @@ void lonely<state_engine>::calc_max_fd()
 {
 	// find the highest fd that is in use
 	for (int i = max_fd; i >= first_fd; --i) {
-		if (fd2state[i] && fd2state[i]->state != STATE_NONE) {
+		if (fd2peer[i] && fd2peer[i]->state != STATE_NONE) {
 			max_fd = i;
 			return;
 		}
@@ -297,9 +299,9 @@ void lonely<state_engine>::log(const string &msg)
 
 	string prefix = local_date;
 
-	if (cur_peer >= 0 && fd2state[cur_peer]) {
+	if (peer_idx >= 0 && fd2peer[peer_idx] != NULL) {
 		prefix += ": ";
-		prefix += fd2state[cur_peer]->from_ip;
+		prefix += fd2peer[peer_idx]->from_ip;
 		prefix += ": ";
 	} else
 		prefix += ": <no client context>: ";
@@ -354,8 +356,8 @@ int lonely_http::loop()
 
 			// this check must come first, as pfds[i].fd is already -1 in
 			// STATE_CLOSING
-			if (fd2state[i] && fd2state[i]->state == STATE_CLOSING) {
-				if (heavy_load || (cur_time - fd2state[i]->alive_time > TIMEOUT_CLOSING)) {
+			if (fd2peer[i] && fd2peer[i]->state == STATE_CLOSING) {
+				if (heavy_load || (cur_time - fd2peer[i]->alive_time > TIMEOUT_CLOSING)) {
 					cleanup(i);
 					continue;
 				}
@@ -363,12 +365,15 @@ int lonely_http::loop()
 
 			if (pfds[i].fd == -1)
 				continue;
-			if (!fd2state[i] || fd2state[i]->state == STATE_NONE)
+			if (!fd2peer[i] || fd2peer[i]->state == STATE_NONE)
 				continue;
 
+			peer = fd2peer[i];
+			peer_idx = i;
+
 			// more than 30s no data?! But don't time out accept socket.
-			if (fd2state[i]->state != STATE_ACCEPTING &&
-			    cur_time - fd2state[i]->alive_time > TIMEOUT_ALIVE) {
+			if (peer->state != STATE_ACCEPTING &&
+			    cur_time - peer->alive_time > TIMEOUT_ALIVE) {
 				cleanup(i);
 				continue;
 			}
@@ -381,14 +386,13 @@ int lonely_http::loop()
 				continue;
 			}
 
-			cur_peer = i;
-			fd2state[i]->alive_time = cur_time;
+			peer->alive_time = cur_time;
 
 			// All below states have an event pending, since we wont
 			// be here if revents would be 0
 
 			// new connection ready to accept?
-			if (fd2state[i]->state == STATE_ACCEPTING) {
+			if (peer->state == STATE_ACCEPTING) {
 				pfds[i].revents = 0;
 				pfds[i].events = POLLIN|POLLOUT;
 
@@ -410,24 +414,25 @@ int lonely_http::loop()
 
 					// We reuse previously allocated but 'cleanup'ed memory to save
 					// speed for lotsa new/delete calls on heavy traffic
-					if (!fd2state[afd]) {
-						fd2state[afd] = new (nothrow) struct http_state;
+					if (!fd2peer[afd]) {
+						fd2peer[afd] = new (nothrow) struct http_client;
 
-						if (!fd2state[afd]) {
+						if (!fd2peer[afd]) {
 							cleanup(afd);
 							continue;
 						}
 					}
 
-					fd2state[afd]->state = STATE_CONNECTED;
-					fd2state[afd]->alive_time = cur_time;
+					fd2peer[afd]->state = STATE_CONNECTED;
+					fd2peer[afd]->alive_time = cur_time;
+					fd2peer[afd]->peer_fd = afd;
 
 					if (af == AF_INET)
 						inet_ntop(AF_INET, &sin.sin_addr, from, sizeof(from));
 					else
 						inet_ntop(AF_INET6, &sin6.sin6_addr, from, sizeof(from));
 
-					fd2state[afd]->from_ip = from;
+					fd2peer[afd]->from_ip = from;
 
 					if (afd > max_fd)
 						max_fd = afd;
@@ -436,17 +441,17 @@ int lonely_http::loop()
 				// There is nothing more to do for the accept socket;
 				// just continue with the other sockets
 				continue;
-			} else if (fd2state[i]->state == STATE_CONNECTED) {
+			} else if (peer->state == STATE_CONNECTED) {
 				if (handle_request() < 0) {
 					cleanup(i);
 					continue;
 				}
-			} else if (fd2state[i]->state == STATE_DOWNLOADING) {
+			} else if (peer->state == STATE_DOWNLOADING) {
 				if (download() < 0) {
 					cleanup(i);
 					continue;
 				}
-			} else if (fd2state[i]->state == STATE_UPLOADING) {
+			} else if (peer->state == STATE_UPLOADING) {
 				if (upload() < 0) {
 					cleanup(i);
 					continue;
@@ -456,14 +461,14 @@ int lonely_http::loop()
 			// do not glue together the above and below if()'s because
 			// download() may change state so we need a 2nd state-engine walk
 
-			if (fd2state[i]->state == STATE_DOWNLOADING) {
+			if (peer->state == STATE_DOWNLOADING) {
 				pfds[i].events = POLLOUT;
-			} else if (fd2state[i]->state == STATE_UPLOADING) {
+			} else if (peer->state == STATE_UPLOADING) {
 				pfds[i].events = POLLIN;
-			} else if (fd2state[i]->state == STATE_CONNECTED)
+			} else if (peer->state == STATE_CONNECTED)
 				pfds[i].events = POLLIN;
 
-			if (!fd2state[i]->keep_alive && fd2state[i]->state == STATE_CONNECTED)
+			if (!peer->keep_alive && peer->state == STATE_CONNECTED)
 				shutdown(i);
 
 			pfds[i].revents = 0;
@@ -481,21 +486,21 @@ int lonely_http::send_http_header()
 	// partial content
 	if (cur_range_requested) {
 		l = snprintf(hbuf, sizeof(hbuf), part_hdr_fmt.c_str(),
-	                     gmt_date, fd2state[cur_peer]->left, misc::content_types[fd2state[cur_peer]->ct].c_type.c_str(),
+	                     gmt_date, peer->left, misc::content_types[peer->ct].c_type.c_str(),
 			     cur_start_range, cur_end_range - 1, cur_stat.st_size);
 	// special regular file (proc or sys)
-	} else if (fd2state[cur_peer]->ftype == FILE_PROC) {
+	} else if (peer->ftype == FILE_PROC) {
 		l = snprintf(hbuf, sizeof(hbuf), chunked_hdr_fmt.c_str(),
 		             gmt_date, "text/plain");
 	} else {
 		l = snprintf(hbuf, sizeof(hbuf), hdr_fmt.c_str(),
-	                     gmt_date, fd2state[cur_peer]->left, misc::content_types[fd2state[cur_peer]->ct].c_type.c_str());
+	                     gmt_date, peer->left, misc::content_types[peer->ct].c_type.c_str());
 	}
 
 	if (l < 0 || l > (int)sizeof(hbuf))
 		return -1;
 
-	int r = writen(cur_peer, hbuf, l);
+	int r = peer->send(hbuf, l);
 
 	if (r != l)
 		return -1;
@@ -506,7 +511,7 @@ int lonely_http::send_http_header()
 
 int lonely_http::send_genindex()
 {
-	const string &p = fd2state[cur_peer]->path;
+	const string &p = peer->path;
 	string idx = "";
 
 	map<string, string>::iterator i = misc::dir2index.find(p);
@@ -517,12 +522,12 @@ int lonely_http::send_genindex()
 	if (l < 0 || l > (int)sizeof(hbuf))
 		return -1;
 
-	int r = writen(cur_peer, hbuf, l);
+	int r = peer->send(hbuf, l);
 
 	if (r != l)
 		return -1;
 
-	r = writen(cur_peer, idx.c_str(), idx.size());
+	r = peer->send(idx.c_str(), idx.size());
 
 	if (r != (int)idx.size())
 		return -1;
@@ -533,7 +538,7 @@ int lonely_http::send_genindex()
 
 int lonely_http::download()
 {
-	int r = 0, fd = fd2state[cur_peer]->fd;
+	int r = 0, fd = peer->file_fd;
 
 	if (fd < 0) {
 		if ((fd = open()) < 0) {
@@ -548,7 +553,7 @@ int lonely_http::download()
 	}
 
 	// send prefix header if nothing has been sent so far
-	if (fd2state[cur_peer]->copied == 0) {
+	if (peer->copied == 0) {
 		if (send_http_header() < 0)
 			return -1;
 	}
@@ -558,7 +563,7 @@ int lonely_http::download()
 		n_send = DEFAULT_SEND_SIZE;
 
 #ifndef STATIC_SEND_SIZE_COMPUTATION
-	int not_sent = flavor::in_send_queue(cur_peer);
+	int not_sent = flavor::in_send_queue(peer->peer_fd);
 
 	if (!forced_send_size && n_clients > MANY_RECEIVERS) {
 		// send queue starts to fill?
@@ -572,7 +577,7 @@ int lonely_http::download()
 		if (n_send < min_send)
 			n_send = min_send;
 
-		fd2state[cur_peer]->in_queue = not_sent;
+		peer->in_queue = not_sent;
 	}
 #else
 	if (!forced_send_size && n_clients > MANY_RECEIVERS) {
@@ -582,30 +587,26 @@ int lonely_http::download()
 	}
 #endif
 
-	size_t n = fd2state[cur_peer]->left;
+	size_t n = peer->left;
 	if (n > n_send)
 		n = n_send;
 
-	r = flavor::sendfile(cur_peer, fd, &fd2state[cur_peer]->offset, // updated by sendfile
-	                     n,
-	                     fd2state[cur_peer]->left,		// updated by sendfile
-	                     fd2state[cur_peer]->copied,	// updated by sendfile
-	                     fd2state[cur_peer]->ftype);
+	r = peer->sendfile(n);
 
 	// Dummy reset of r, if EAGAIN appears on nonblocking socket
 	if (errno == EAGAIN)
 		r = 1;
 
 	if (r < 0) {
-		fd2state[cur_peer]->state = STATE_CONNECTED;
-		fd2state[cur_peer]->keep_alive = 0;
+		peer->state = STATE_CONNECTED;
+		peer->keep_alive = 0;
 		return -1;
-	} else if (fd2state[cur_peer]->left == 0) {
+	} else if (peer->left == 0) {
 		//close(pf.fd); Do not close, due to caching
-		fd2state[cur_peer]->state = STATE_CONNECTED;
-		fd2state[cur_peer]->header_time = 0;
+		peer->state = STATE_CONNECTED;
+		peer->header_time = 0;
 	} else {
-		fd2state[cur_peer]->state = STATE_DOWNLOADING;
+		peer->state = STATE_DOWNLOADING;
 	}
 
 	return 0;
@@ -618,7 +619,7 @@ int lonely_http::HEAD()
 	string head;
 	char content[128];
 	size_t cl = 0;
-	string &p = fd2state[cur_peer]->path;
+	string &p = peer->path;
 
 	string logstr = "HEAD ";
 	logstr += p;
@@ -646,7 +647,7 @@ int lonely_http::HEAD()
 		} else {
 			cl = cur_stat.st_size;
 			// No Range: for HTML
-			if (fd2state[cur_peer]->ct == misc::CONTENT_HTML)
+			if (peer->ct == misc::CONTENT_HTML)
 				head += "Accept-Ranges: none\r\nDate: ";
 			else
 				head += "Accept-Ranges: bytes\r\nDate: ";
@@ -656,10 +657,10 @@ int lonely_http::HEAD()
 	head += gmt_date;
 	snprintf(content, sizeof(content), "\r\nContent-Length: %zu\r\nContent-Type: ", cl);
 	head += content;
-	head += misc::content_types[fd2state[cur_peer]->ct].c_type;
+	head += misc::content_types[peer->ct].c_type;
 	head += "\r\nServer: lophttpd\r\nConnection: keep-alive\r\n\r\n";
 
-	if (writen(cur_peer, head.c_str(), head.size()) != (int)head.size())
+	if (peer->send(head.c_str(), head.size()) != (int)head.size())
 		return -1;
 	return 0;
 }
@@ -672,7 +673,7 @@ int lonely_http::OPTIONS()
 	reply += "\r\nServer: lophttpd\r\nContent-Length: 0\r\nAllow: OPTIONS, GET, HEAD, POST, PUT\r\n\r\n";
 
 	log("OPTIONS\n");
-	if (writen(cur_peer, reply.c_str(), reply.size()) != (int)reply.size())
+	if (peer->send(reply.c_str(), reply.size()) != (int)reply.size())
 		return -1;
 	return 0;
 }
@@ -705,28 +706,28 @@ int lonely_http::upload()
 	ssize_t n = 0;
 
 	// upload file fd is closed via cleanup() in STATE_UPLOADING
-	if ((n = recv(cur_peer, buf, sizeof(buf), 0)) <= 0)
+	if ((n = peer->recv(buf, sizeof(buf))) <= 0)
 		return send_error(HTTP_ERROR_400);
 
-	if (write(fd2state[cur_peer]->fd, buf, n) != n)
+	if (write(peer->file_fd, buf, n) != n)
 		return send_error(HTTP_ERROR_500);
 
-	fd2state[cur_peer]->copied += n;
+	peer->copied += n;
 
-	if (fd2state[cur_peer]->copied == fd2state[cur_peer]->left) {
+	if (peer->copied == peer->left) {
 		string html = "<html><body>File ";
 		if (!httpd_config::rand_upload_quiet)
-			html += fd2state[cur_peer]->path;
+			html += peer->path;
 		html += " was successfully uploaded.</body></html>\n";
 		n = snprintf(buf, sizeof(buf), put_hdr_fmt.c_str(),
 		         gmt_date, html.size());
 
-		writen(cur_peer, buf, n);
-		writen(cur_peer, html.c_str(), html.size());
+		peer->send(buf, n);
+		peer->send(html.c_str(), html.size());
 
-		close(fd2state[cur_peer]->fd);
-		fd2state[cur_peer]->state = STATE_CONNECTED;
-		fd2state[cur_peer]->keep_alive = 0;
+		close(peer->file_fd);
+		peer->state = STATE_CONNECTED;
+		peer->keep_alive = 0;
 	}
 
 	return 0;
@@ -735,7 +736,7 @@ int lonely_http::upload()
 
 int lonely_http::PUT()
 {
-	string &p = fd2state[cur_peer]->path;
+	string &p = peer->path;
 
 	string logstr = "PUT ";
 	logstr += p;
@@ -746,9 +747,9 @@ int lonely_http::PUT()
 		return send_error(HTTP_ERROR_400);
 
 	int fd = 0;
-	fd2state[cur_peer]->offset = 0;
-	fd2state[cur_peer]->copied = 0;
-	fd2state[cur_peer]->left = fd2state[cur_peer]->blen;
+	peer->offset = 0;
+	peer->copied = 0;
+	peer->left = peer->blen;
 
 	if (httpd_config::rand_upload) {
 		char rnd[64];
@@ -761,8 +762,8 @@ int lonely_http::PUT()
 	if ((fd = ::open(p.c_str(), O_WRONLY|O_CREAT|O_EXCL, 0600)) < 0)
 		return send_error(HTTP_ERROR_400);
 
-	fd2state[cur_peer]->fd = fd;
-	fd2state[cur_peer]->state = STATE_UPLOADING;
+	peer->file_fd = fd;
+	peer->state = STATE_UPLOADING;
 	return 0;
 }
 
@@ -782,9 +783,9 @@ void lonely_http::clear_cache()
 
 	// do not close files in transfer
 	for (int i = 0; i <= max_fd; ++i) {
-		if (fd2state[i]) {
-			if (fd2state[i]->state == STATE_DOWNLOADING) {
-				inode ino = {fd2state[i]->dev, fd2state[i]->ino};
+		if (fd2peer[i]) {
+			if (fd2peer[i]->state == STATE_DOWNLOADING) {
+				inode ino = {fd2peer[i]->dev, fd2peer[i]->ino};
 				dont_close[ino] = 1;
 			}
 		}
@@ -803,7 +804,7 @@ void lonely_http::clear_cache()
 
 int lonely_http::stat()
 {
-	const string &p = fd2state[cur_peer]->path;
+	const string &p = peer->path;
 	int r = 0, ct = misc::CONTENT_DATA;
 	bool cacheit = 0;
 
@@ -844,7 +845,7 @@ int lonely_http::stat()
 
 		// workaround for /proc and /sys files which are always reported 0 byte in size
 		if (S_ISREG(cur_stat.st_mode) && cur_stat.st_blocks == 0) {
-			fd2state[cur_peer]->ftype = FILE_PROC;
+			peer->ftype = FILE_PROC;
 
 		// special case for blockdevices; if not already fetched size,
 		// put it into cur_stat
@@ -858,11 +859,11 @@ int lonely_http::stat()
 				cacheit = 1;
 			}
 			ct = misc::CONTENT_DATA;
-			fd2state[cur_peer]->ftype = FILE_DEVICE;
+			peer->ftype = FILE_DEVICE;
 		}
-		fd2state[cur_peer]->dev = cur_stat.st_dev;
-		fd2state[cur_peer]->ino = cur_stat.st_ino;
-		fd2state[cur_peer]->ct = ct;
+		peer->dev = cur_stat.st_dev;
+		peer->ino = cur_stat.st_ino;
+		peer->ct = ct;
 		if (cacheit)
 			stat_cache[p] = make_pair<struct stat, int>(cur_stat, ct);
 	}
@@ -879,36 +880,36 @@ int lonely_http::open()
 {
 	int fd = -1;
 	int flags = O_RDONLY|O_NOCTTY;
-	struct inode i = {fd2state[cur_peer]->dev, fd2state[cur_peer]->ino};
+	struct inode i = {peer->dev, peer->ino};
 
-	if (fd2state[cur_peer]->ftype == FILE_PROC)
+	if (peer->ftype == FILE_PROC)
 		flags |= O_NONBLOCK;
 
 	map<inode, int>::iterator it = file_cache.find(i);
 	if (it != file_cache.end()) {
 		fd = it->second;
 	} else {
-		fd = ::open(fd2state[cur_peer]->path.c_str(), flags);
+		fd = ::open(peer->path.c_str(), flags);
 		if (fd >= 0) {
 			file_cache[i] = fd;
 		// Too many open files? Drop caches
 		} else if (errno == EMFILE || errno == ENFILE) {
 			heavy_load = 1;
 			clear_cache();
-			fd = ::open(fd2state[cur_peer]->path.c_str(), flags);
+			fd = ::open(peer->path.c_str(), flags);
 			if (fd >= 0)
 				file_cache[i] = fd;
 		}
 	}
 
-	fd2state[cur_peer]->fd = fd;
+	peer->file_fd = fd;
 	return fd;
 }
 
 
 int lonely_http::de_escape_path()
 {
-	string &p = fd2state[cur_peer]->path;
+	string &p = peer->path;
 	if (p.find("%") == string::npos)
 		return 0;
 
@@ -951,7 +952,7 @@ int lonely_http::GETPOST()
 		logstr = "POST ";
 	}
 
-	logstr += fd2state[cur_peer]->path;
+	logstr += peer->path;
 	logstr += "\n";
 	log(logstr);
 
@@ -972,13 +973,13 @@ int lonely_http::GETPOST()
 			}
 		}
 
-		fd2state[cur_peer]->offset = cur_start_range;
-		fd2state[cur_peer]->copied = 0;
-		fd2state[cur_peer]->left = cur_end_range - cur_start_range;
+		peer->offset = cur_start_range;
+		peer->copied = 0;
+		peer->left = cur_end_range - cur_start_range;
 
 		// proc files always report size 0
-		if (fd2state[cur_peer]->ftype == FILE_PROC)
-			fd2state[cur_peer]->left = 1024;
+		if (peer->ftype == FILE_PROC)
+			peer->left = 1024;
 
 		if (download() < 0)
 			return -1;
@@ -986,16 +987,16 @@ int lonely_http::GETPOST()
 		// No Range: requests for directories
 		if (cur_range_requested)
 			return send_error(HTTP_ERROR_416);
-		if (misc::dir2index.count(fd2state[cur_peer]->path) > 0) {
+		if (misc::dir2index.count(peer->path) > 0) {
 			if (send_genindex() < 0)
 				return -1;
 		} else {
 			// No generated index. Maybe index.html itself?
-			fd2state[cur_peer]->path += "/index.html";
+			peer->path += "/index.html";
 			if (stat() == 0 && (S_ISREG(cur_stat.st_mode))) {
-				fd2state[cur_peer]->offset = 0;
-				fd2state[cur_peer]->copied = 0;
-				fd2state[cur_peer]->left = cur_stat.st_size;
+				peer->offset = 0;
+				peer->copied = 0;
+				peer->left = cur_stat.st_size;
 				if (download() < 0)
 					return -1;
 			} else
@@ -1030,17 +1031,17 @@ int lonely_http::send_error(http_error_code_t e)
 
 	if (!httpd_config::no_error_kill) {
 		http_header += "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-		fd2state[cur_peer]->keep_alive = 0;
+		peer->keep_alive = 0;
 	} else
 		http_header += "\r\nContent-Length: 0\r\n\rn";
 
-	if (writen(cur_peer, http_header.c_str(), http_header.size()) <= 0) {
-		shutdown(cur_peer);
+	if (peer->send(http_header.c_str(), http_header.size()) <= 0) {
+		shutdown(peer_idx);
 		return -1;
 	}
 
 	if (!httpd_config::no_error_kill)
-		shutdown(cur_peer);
+		shutdown(peer_idx);
 
 	return 0;
 }
@@ -1055,28 +1056,28 @@ int lonely_http::handle_request()
 	memset(req_buf, 0, sizeof(req_buf));
 
 	// peek to find hopefully a complete header
-	if ((n = recv(cur_peer, req_buf, sizeof(req_buf) - 1, MSG_PEEK)) <= 0) {
-		err = "lonely_http::handle_connection::recv:";
+	if ((n = peer->peek(req_buf, sizeof(req_buf) - 1)) <= 0) {
+		err = "lonely_http::handle_connection::peek:";
 		err += strerror(errno);
 		return -1;
 	}
 
 	// If first read, set initial timestamp for header TO
-	if (fd2state[cur_peer]->header_time == 0)
-		fd2state[cur_peer]->header_time = cur_time;
+	if (peer->header_time == 0)
+		peer->header_time = cur_time;
 
 	// incomplete header?
 	if ((ptr = strstr(req_buf, "\r\n\r\n")) == NULL) {
-		if (cur_time - fd2state[cur_peer]->header_time > TIMEOUT_HEADER) {
+		if (cur_time - peer->header_time > TIMEOUT_HEADER) {
 			return send_error(HTTP_ERROR_400);
 		}
-		fd2state[cur_peer]->keep_alive = 1;
+		peer->keep_alive = 1;
 		return 0;
 	}
 
 	// read exactly the header from the queue, including \r\n\r\n
-	if ((n = read(cur_peer, req_buf, ptr - req_buf + 4)) <= 0) {
-		err = "lonely_http::handle_connection::read:";
+	if ((n = peer->recv(req_buf, ptr - req_buf + 4)) <= 0) {
+		err = "lonely_http::handle_connection::recv:";
 		err += strerror(errno);
 		return -1;
 	}
@@ -1086,7 +1087,7 @@ int lonely_http::handle_request()
 	// At most sizeof(req_buf)-1
 	req_buf[n] = 0;
 
-	fd2state[cur_peer]->keep_alive = 0;
+	peer->keep_alive = 0;
 	int (lonely_http::*action)() = NULL;
 
 	cur_request = HTTP_REQUEST_NONE;
@@ -1123,7 +1124,7 @@ int lonely_http::handle_request()
 			return send_error(HTTP_ERROR_414);
 		// The body should be right here, we dont mind if stupid senders
 		// send them separately
-		if ((size_t)recv(cur_peer, body, sizeof(body), MSG_DONTWAIT) != cl)
+		if ((size_t)peer->recv(body, sizeof(body)) != cl)
 			return send_error(HTTP_ERROR_400);
 		else
 			return send_error(HTTP_ERROR_411);
@@ -1139,7 +1140,7 @@ int lonely_http::handle_request()
 		cur_request = HTTP_REQUEST_HEAD;
 		ptr = req_buf + 4;
 	} else if (strncmp(req_buf, "PUT", 3) == 0) {
-		fd2state[cur_peer]->blen = cl;
+		peer->blen = cl;
 		if (strcasestr(req_buf, "\r\nExpect:"))
 			expecting = 1;
 		action = &lonely_http::PUT;
@@ -1186,20 +1187,20 @@ int lonely_http::handle_request()
 			return send_error(HTTP_ERROR_400);
 
 		if (expecting)
-			writen(cur_peer, "HTTP/1.1 100 Continue\r\n\r\n", 25);
+			peer->send("HTTP/1.1 100 Continue\r\n\r\n", 25);
 
-		fd2state[cur_peer]->path = httpd_config::upload;
+		peer->path = httpd_config::upload;
 		if (*ptr != '/')
-			fd2state[cur_peer]->path += "/";
-		fd2state[cur_peer]->path += ptr;
+			peer->path += "/";
+		peer->path += ptr;
 	} else
-		fd2state[cur_peer]->path = ptr;
+		peer->path = ptr;
 
 	ptr = end_ptr + 2; // rest of header
 	if (ptr > last_byte)
 		return send_error(HTTP_ERROR_400);
 
-	if ((ptr2 = strcasestr(ptr, "Connection:")) && cur_peer < 30000) {
+	if ((ptr2 = strcasestr(ptr, "Connection:")) && peer_idx < 30000) {
 		ptr2 += 11;
 		for (;ptr2 < last_byte; ++ptr2) {
 			if (*ptr2 != ' ')
@@ -1209,7 +1210,7 @@ int lonely_http::handle_request()
 			return send_error(HTTP_ERROR_400);
 
 		if (strncasecmp(ptr2, "keep-alive", 10) == 0) {
-			fd2state[cur_peer]->keep_alive = 1;
+			peer->keep_alive = 1;
 		}
 	}
 	if (vhosts && (ptr2 = strcasestr(ptr, "Host:"))) {
@@ -1232,12 +1233,12 @@ int lonely_http::handle_request()
 
 			// If already requesting vhost files (genindex), then, do not prepend
 			// vhost path again
-			if (!strstr(fd2state[cur_peer]->path.c_str(), "vhost")) {
-				string tmps = fd2state[cur_peer]->path;
-				fd2state[cur_peer]->path = "/vhost";
-				fd2state[cur_peer]->path += ptr2;
+			if (!strstr(peer->path.c_str(), "vhost")) {
+				string tmps = peer->path;
+				peer->path = "/vhost";
+				peer->path += ptr2;
 				if (tmps != "/")
-					fd2state[cur_peer]->path += tmps;
+					peer->path += tmps;
 			}
 		} else {
 			return send_error(HTTP_ERROR_400);
@@ -1284,8 +1285,8 @@ int lonely_http::handle_request()
 }
 
 // instantiate a lonely_http with http_state
-template class lonely<http_state>;
-template class lonely<rproxy_state>;
+template class lonely<http_client>;
+template class lonely<rproxy_client>;
 
 
 

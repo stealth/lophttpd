@@ -50,49 +50,8 @@
 #include "log.h"
 
 
-// distinguish between client and server side to find out
-// about new requests on a keep-alive connection
-typedef enum {
-	HTTP_NONE = 0,
-	HTTP_CLIENT,
-	HTTP_SERVER
-} http_instance_t;
 
-
-struct rproxy_state {
-	int fd, peer_fd, keep_alive;
-	status_t state;
-	time_t alive_time, header_time;
-	off_t offset;
-	struct rproxy_config::backend node;
-	std::string opath, from_ip;
-	char buf[4096];
-	size_t blen;
-	uint64_t chunk_len;
-	bool header, chunked;
-
-	http_instance_t type;
-
-	rproxy_state()
-	 : fd(-1), peer_fd(-1), keep_alive(0), state(STATE_ERROR), alive_time(0), header_time(0),
-	   opath(""), from_ip(""), blen(0),
-	   chunk_len(0), header(1), chunked(0), type(HTTP_NONE) {};
-
-	void cleanup()
-	{
-		fd = peer_fd = -1;
-		state = STATE_NONE;
-		type = HTTP_NONE;
-		node.host.clear(); node.path.clear(); opath.clear(); from_ip.clear();
-		blen = chunk_len = 0;
-		header = 1;
-		chunked = 0;
-		alive_time = header_time = 0;
-	}
-};
-
-
-class rproxy : public lonely<rproxy_state> {
+class rproxy : public lonely<rproxy_client> {
 private:
 	std::map<std::pair<std::string, std::string>, struct rproxy_config::backend> client_map;
 

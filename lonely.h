@@ -44,112 +44,8 @@
 #include <unistd.h>
 #include <map>
 #include <utility>
+#include "client.h"
 #include "log.h"
-
-
-typedef enum {
-	STATE_CONNECTING = 0,
-	STATE_ACCEPTING,
-	STATE_DECIDING,
-	STATE_CONNECTED,
-	STATE_DOWNLOADING,
-	STATE_UPLOADING,
-	STATE_CLOSING,
-	STATE_NONE,
-	STATE_ERROR
-} status_t;
-
-
-typedef enum {
-	FILE_REGULAR = 0,
-	FILE_SPECIAL = 1,
-	FILE_DEVICE = 2,
-	FILE_PROC = 3
-} file_t;
-
-
-// basic state struct needed for an httpd server
-struct http_state {
-	int fd;
-	status_t state;
-	time_t alive_time, header_time;
-	bool keep_alive;
-	off_t offset;
-	size_t copied, left;
-	dev_t dev;
-	ino_t ino;
-	std::string path, from_ip;
-	int ct, in_queue;
-	file_t ftype;
-	size_t blen;
-
-	http_state()
-	 : fd(-1), state(STATE_ERROR), alive_time(0), header_time(0),
-	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), from_ip(""),
-	   ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0) {};
-
-	// might be called twice, so no double-free's
-	void cleanup()
-	{
-		if (state == STATE_UPLOADING)
-			close(fd);
-		fd = -1;
-		copied = left = 0;
-		offset = 0;
-		keep_alive = 0;
-		alive_time = header_time = 0;
-		dev = ino = 0;
-		ct = in_queue = 0;
-		ftype = FILE_REGULAR;
-		state = STATE_NONE;
-		path.clear(); from_ip.clear();
-		blen = 0;
-	}
-};
-
-
-template<typename state_engine>
-class lonely {
-protected:
-	struct pollfd *pfds;
-	int first_fd, max_fd;
-	int cur_peer;
-	uint32_t n_clients;
-	int af;
-	log_provider *logger;
-
-	time_t cur_time;
-	suseconds_t cur_usec;
-	char gmt_date[64], local_date[64];
-
-	std::string err;
-	state_engine **fd2state;
-	bool heavy_load;
-	size_t so_sndbuf;
-
-	void cleanup(int);
-
-	void shutdown(int);
-
-	void calc_max_fd();
-
-public:
-	lonely()
-	 : first_fd(0), max_fd(0), cur_peer(-1), n_clients(0), logger(NULL), cur_time(0), cur_usec(0),
-	   err(""), fd2state(NULL), heavy_load(0), so_sndbuf(4096) {};
-
-	virtual ~lonely() { delete [] pfds; delete logger; };
-
-	int init(const std::string &, const std::string &, int a = AF_INET);
-
-	int open_log(const std::string &, const std::string &, int core);
-
-	void log(const std::string &);
-
-	virtual int loop() = 0;
-
-	const char *why();
-};
 
 
 typedef enum {
@@ -181,6 +77,53 @@ typedef enum {
 } http_request_t;
 
 
+
+template<typename T>
+class lonely {
+protected:
+	struct pollfd *pfds;
+	int first_fd, max_fd;
+	T *peer;
+	T **fd2peer;
+	int peer_idx;
+	uint32_t n_clients;
+	int af;
+	log_provider *logger;
+
+	time_t cur_time;
+	suseconds_t cur_usec;
+	char gmt_date[64], local_date[64];
+
+	std::string err;
+
+	bool heavy_load;
+	size_t so_sndbuf;
+
+	void cleanup(int);
+
+	void shutdown(int);
+
+	void calc_max_fd();
+
+public:
+	lonely()
+	 : first_fd(0), max_fd(0), peer(NULL), fd2peer(NULL), peer_idx(-1), n_clients(0), logger(NULL),
+	   cur_time(0), cur_usec(0), err(""), heavy_load(0), so_sndbuf(4096) {};
+
+	virtual ~lonely() { delete [] pfds; delete logger; };
+
+	int init(const std::string &, const std::string &, int a = AF_INET);
+
+	int open_log(const std::string &, const std::string &, int core);
+
+	void log(const std::string &);
+
+	virtual int loop() = 0;
+
+	const char *why();
+};
+
+
 enum {
 	TIMEOUT_ALIVE = 30,
 	TIMEOUT_CLOSING = 5,
@@ -205,7 +148,7 @@ struct inode {
 extern std::string http_error_msgs[];
 
 
-class lonely_http : public lonely<http_state> {
+class lonely_http : public lonely<http_client> {
 private:
 	struct stat cur_stat;
 	off_t cur_start_range;

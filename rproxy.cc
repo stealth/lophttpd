@@ -45,6 +45,7 @@
 #include "lonely.h"
 #include "config.h"
 #include "rproxy.h"
+#include "client.h"
 #include "flavor.h"
 
 
@@ -85,8 +86,8 @@ int rproxy::loop()
 		// assert: pfds[i].fd == i
 		for (i = first_fd; i <= max_fd; ++i) {
 
-			if (fd2state[i] && fd2state[i]->state == STATE_CLOSING) {
-				if (heavy_load || cur_time - fd2state[i]->alive_time > TIMEOUT_CLOSING) {
+			if (fd2peer[i] && fd2peer[i]->state == STATE_CLOSING) {
+				if (heavy_load || cur_time - fd2peer[i]->alive_time > TIMEOUT_CLOSING) {
 					cleanup(i);
 					continue;
 				}
@@ -95,28 +96,28 @@ int rproxy::loop()
 			if (pfds[i].fd == -1)
 				continue;
 
-			if (!fd2state[i])
+			if (!fd2peer[i])
 				continue;
 
 			// timeout hanging connections (with pending data) but not accepting
 			// socket
-			if (cur_time - fd2state[i]->alive_time >= TIMEOUT_ALIVE &&
-			    fd2state[i]->state != STATE_ACCEPTING &&
-			    (fd2state[i]->blen > 0 || fd2state[i]->state == STATE_DECIDING)) {
+			if (cur_time - fd2peer[i]->alive_time >= TIMEOUT_ALIVE &&
+			    fd2peer[i]->state != STATE_ACCEPTING &&
+			    (fd2peer[i]->blen > 0 || fd2peer[i]->state == STATE_DECIDING)) {
 
 				// always call fd and its peer in pairs: cleanup() + cleanup() or
 				// shutdown() + cleanup(). Otherwise re-used fd's can make troubles.
-				cleanup(fd2state[i]->peer_fd);
+				cleanup(fd2peer[i]->peer_fd);
 				cleanup(i);
 				continue;
 			}
 
 			if ((pfds[i].revents & (POLLERR|POLLHUP|POLLNVAL)) != 0) {
-				if (fd2state[i]->blen > 0) {
-					writen(fd2state[i]->peer_fd, fd2state[i]->buf, fd2state[i]->blen);
-					fd2state[i]->blen = 0;
+				if (fd2peer[i]->blen > 0) {
+					writen(fd2peer[i]->peer_fd, fd2peer[i]->buf, fd2peer[i]->blen);
+					fd2peer[i]->blen = 0;
 				}
-				shutdown(fd2state[i]->peer_fd);
+				shutdown(fd2peer[i]->peer_fd);
 				cleanup(i);
 				continue;
 			}
@@ -124,10 +125,11 @@ int rproxy::loop()
 			if (pfds[i].revents == 0)
 				continue;
 
-			cur_peer = i;
+			peer_idx = i;
+			peer = fd2peer[i];
 
 			// new connection ready to accept?
-			if (fd2state[i]->state == STATE_ACCEPTING) {
+			if (fd2peer[i]->state == STATE_ACCEPTING) {
 				pfds[i].revents = 0;
 				for (;;) {
 					heavy_load = 0;
@@ -142,10 +144,10 @@ int rproxy::loop()
 					pfds[afd].events = POLLIN;
 					pfds[afd].revents = 0;
 
-					if (!fd2state[afd]) {
-						fd2state[afd] = new (nothrow) rproxy_state;
+					if (!fd2peer[afd]) {
+						fd2peer[afd] = new (nothrow) rproxy_client;
 
-						if (!fd2state[afd]) {
+						if (!fd2peer[afd]) {
 							err = "OOM";
 							close(afd);
 							return -1;
@@ -155,10 +157,10 @@ int rproxy::loop()
 					if (inet_ntop(af, &sin.sin_addr, from, sizeof(from)) < 0)
 						continue;
 
-					fd2state[afd]->from_ip = from;
-					fd2state[afd]->fd = afd;
-					fd2state[afd]->state = STATE_DECIDING;
-					fd2state[afd]->alive_time = cur_time;
+					fd2peer[afd]->from_ip = from;
+					fd2peer[afd]->fd = afd;
+					fd2peer[afd]->state = STATE_DECIDING;
+					fd2peer[afd]->alive_time = cur_time;
 
 					pfds[i].events = POLLOUT|POLLIN;
 
@@ -166,28 +168,28 @@ int rproxy::loop()
 						max_fd = afd;
 				}
 				continue;
-			} else if (fd2state[i]->state == STATE_DECIDING) {
+			} else if (fd2peer[i]->state == STATE_DECIDING) {
 					// Also in DECIDING state, there might be response from server
 					// to be sent to client
 					if (pfds[i].revents & POLLOUT) {
 						// actually data to send?
-						if ((n = fd2state[fd2state[i]->peer_fd]->blen) > 0) {
-							wn = writen(i, fd2state[fd2state[i]->peer_fd]->buf, n);
+						if ((n = fd2peer[fd2peer[i]->peer_fd]->blen) > 0) {
+							wn = writen(i, fd2peer[fd2peer[i]->peer_fd]->buf, n);
 							if (wn <= 0) {
-								shutdown(fd2state[i]->peer_fd);
+								shutdown(fd2peer[i]->peer_fd);
 								cleanup(i);
 								continue;
 							}
 							// non blocking write couldnt write it all at once
 							if (wn != (int)n) {
-								memmove(fd2state[fd2state[i]->peer_fd]->buf,
-								        fd2state[fd2state[i]->peer_fd]->buf + wn,
+								memmove(fd2peer[fd2peer[i]->peer_fd]->buf,
+								        fd2peer[fd2peer[i]->peer_fd]->buf + wn,
 								         n - wn);
 								pfds[i].events = POLLOUT|POLLIN;
 							} else {
 								pfds[i].events = POLLIN;
 							}
-							fd2state[fd2state[i]->peer_fd]->blen -= wn;
+							fd2peer[fd2peer[i]->peer_fd]->blen -= wn;
 						} else
 							pfds[i].events &= ~POLLOUT;
 						pfds[i].revents = 0;
@@ -204,29 +206,29 @@ int rproxy::loop()
 						pfds[i].events = POLLIN;
 						continue;
 					} else if (peer_fd < 0) {
-						cleanup(fd2state[i]->peer_fd);
+						cleanup(fd2peer[i]->peer_fd);
 						cleanup(i);
 						continue;
 					}
 
-					bool same_conn = (fd2state[i]->peer_fd == peer_fd);
+					bool same_conn = (fd2peer[i]->peer_fd == peer_fd);
 					// mangle_request_header() may return the same, already
 					// esablished, connection if the same URL is requested again
 					if (!same_conn) {
 						// exception with the cleanup()+cleanup() pair calling,
 						// however this one is OK, as the peer_fd is resetted by hand
-						cleanup(fd2state[i]->peer_fd);
-						fd2state[i]->peer_fd = peer_fd;
+						cleanup(fd2peer[i]->peer_fd);
+						fd2peer[i]->peer_fd = peer_fd;
 					}
 
-					fd2state[i]->state = STATE_CONNECTED;
-					fd2state[i]->alive_time = cur_time;
-					fd2state[i]->type = HTTP_CLIENT;
-					fd2state[i]->header = 0;
+					fd2peer[i]->state = STATE_CONNECTED;
+					fd2peer[i]->alive_time = cur_time;
+					fd2peer[i]->type = HTTP_CLIENT;
+					fd2peer[i]->header = 0;
 
-					if (!fd2state[peer_fd]) {
-						fd2state[peer_fd] = new (nothrow) rproxy_state;
-						if (!fd2state[peer_fd]) {
+					if (!fd2peer[peer_fd]) {
+						fd2peer[peer_fd] = new (nothrow) rproxy_client;
+						if (!fd2peer[peer_fd]) {
 							err = "OOM";
 							cleanup(i);
 							close(peer_fd);
@@ -236,13 +238,13 @@ int rproxy::loop()
 
 					// only for new connections:
 					if (!same_conn) {
-						fd2state[peer_fd]->fd = peer_fd;
-						fd2state[peer_fd]->peer_fd = i;
-						fd2state[peer_fd]->state = STATE_CONNECTING;
-						fd2state[peer_fd]->type = HTTP_SERVER;
+						fd2peer[peer_fd]->fd = peer_fd;
+						fd2peer[peer_fd]->peer_fd = i;
+						fd2peer[peer_fd]->state = STATE_CONNECTING;
+						fd2peer[peer_fd]->type = HTTP_SERVER;
 					}
 
-					fd2state[peer_fd]->alive_time = cur_time;
+					fd2peer[peer_fd]->alive_time = cur_time;
 
 					pfds[peer_fd].fd = peer_fd;
 					pfds[peer_fd].events = POLLIN|POLLOUT;
@@ -251,64 +253,64 @@ int rproxy::loop()
 					// only POLLIN, since we just fetched request and need
 					// to forward it first
 					pfds[i].events = POLLIN;
-					if (fd2state[peer_fd]->blen > 0)
+					if (fd2peer[peer_fd]->blen > 0)
 						pfds[i].events |= POLLOUT;
 
 					if (peer_fd > max_fd)
 						max_fd = peer_fd;
-			} else if (fd2state[i]->state == STATE_CONNECTING) {
+			} else if (fd2peer[i]->state == STATE_CONNECTING) {
 				if (finish_connecting(i) < 0) {
 					err = "rproxy::loop::";
 					err += ns_socket::why();
-					cleanup(fd2state[i]->peer_fd);
+					cleanup(fd2peer[i]->peer_fd);
 					cleanup(i);
 					// log
 					continue;
 				}
-				fd2state[i]->state = STATE_CONNECTED;
-				fd2state[i]->alive_time = cur_time;
+				fd2peer[i]->state = STATE_CONNECTED;
+				fd2peer[i]->alive_time = cur_time;
 
 				// POLLOUT too, since mangle_request_header() already slurped data
 				// from client
 				pfds[i].events = POLLIN|POLLOUT;
 				pfds[i].revents = 0;
-			} else if (fd2state[i]->state == STATE_CONNECTED) {
+			} else if (fd2peer[i]->state == STATE_CONNECTED) {
 
 				// peer not ready yet
-				if (!fd2state[fd2state[i]->peer_fd] ||
-				    fd2state[fd2state[i]->peer_fd]->state == STATE_CONNECTING) {
+				if (!fd2peer[fd2peer[i]->peer_fd] ||
+				    fd2peer[fd2peer[i]->peer_fd]->state == STATE_CONNECTING) {
 					pfds[i].revents = 0;
 					continue;
 				}
 
 				if (pfds[i].revents & POLLOUT) {
 					// actually data to send?
-					if ((n = fd2state[fd2state[i]->peer_fd]->blen) > 0) {
-						wn = writen(i, fd2state[fd2state[i]->peer_fd]->buf, n);
+					if ((n = fd2peer[fd2peer[i]->peer_fd]->blen) > 0) {
+						wn = writen(i, fd2peer[fd2peer[i]->peer_fd]->buf, n);
 						if (wn <= 0) {
-							shutdown(fd2state[i]->peer_fd);
+							shutdown(fd2peer[i]->peer_fd);
 							cleanup(i);
 							continue;
 						}
 						// non blocking write couldnt write it all at once
 						if (wn != (int)n) {
-							memmove(fd2state[fd2state[i]->peer_fd]->buf,
-							        fd2state[fd2state[i]->peer_fd]->buf + wn,
+							memmove(fd2peer[fd2peer[i]->peer_fd]->buf,
+							        fd2peer[fd2peer[i]->peer_fd]->buf + wn,
 							         n - wn);
 							pfds[i].events = POLLOUT|POLLIN;
 						} else {
 							pfds[i].events = POLLIN;
 						}
-						fd2state[fd2state[i]->peer_fd]->blen -= wn;
+						fd2peer[fd2peer[i]->peer_fd]->blen -= wn;
 					} else
 						pfds[i].events &= ~POLLOUT;
 				}
 
 				if (pfds[i].revents & POLLIN) {
 					// still data in buffer? dont read() new data
-					if (fd2state[i]->blen > 0) {
+					if (fd2peer[i]->blen > 0) {
 						pfds[i].events |= POLLIN;
-						pfds[fd2state[i]->peer_fd].events = POLLOUT|POLLIN;
+						pfds[fd2peer[i]->peer_fd].events = POLLOUT|POLLIN;
 						pfds[i].revents = 0;
 						continue;
 					}
@@ -317,26 +319,26 @@ int rproxy::loop()
 
 					if (r < 0) {
 						// no need to flush data here, as we won't be here
-						// with fd2state[i]->blen > 0
-						shutdown(fd2state[cur_peer]->peer_fd);
-						cleanup(cur_peer);
+						// with fd2peer[i]->blen > 0
+						shutdown(fd2peer[peer_idx]->peer_fd);
+						cleanup(peer_idx);
 						continue;
 
 					// could not read complete header or so
 					} else if (r == 0) {
-						pfds[cur_peer].events |= POLLIN;
-						pfds[cur_peer].revents = 0;
+						pfds[peer_idx].events |= POLLIN;
+						pfds[peer_idx].revents = 0;
 						continue;
 					}
 
 					// peer has data to write
-					pfds[fd2state[i]->peer_fd].events = POLLOUT|POLLIN;
+					pfds[fd2peer[i]->peer_fd].events = POLLOUT|POLLIN;
 					pfds[i].events |= POLLIN;
 				}
 
 				pfds[i].revents = 0;
-				fd2state[i]->alive_time = cur_time;
-				fd2state[fd2state[i]->peer_fd]->alive_time = cur_time;
+				fd2peer[i]->alive_time = cur_time;
+				fd2peer[fd2peer[i]->peer_fd]->alive_time = cur_time;
 			}
 
 		}
@@ -350,33 +352,33 @@ int rproxy::loop()
 ssize_t rproxy::more_client_bytes()
 {
 	ssize_t r = 0;
-	size_t n = sizeof(fd2state[cur_peer]->buf);
+	size_t n = sizeof(fd2peer[peer_idx]->buf);
 
 	// already slurped in whole request?
-	if (fd2state[cur_peer]->chunk_len == 0) {
-		fd2state[cur_peer]->header = 1;
-		fd2state[cur_peer]->state = STATE_DECIDING;
-		fd2state[cur_peer]->alive_time = cur_time;
-		fd2state[cur_peer]->header_time = 0;
+	if (fd2peer[peer_idx]->chunk_len == 0) {
+		fd2peer[peer_idx]->header = 1;
+		fd2peer[peer_idx]->state = STATE_DECIDING;
+		fd2peer[peer_idx]->alive_time = cur_time;
+		fd2peer[peer_idx]->header_time = 0;
 		return 0;
 	}
 
-	if (fd2state[cur_peer]->chunk_len < sizeof(fd2state[cur_peer]->buf))
-		n = fd2state[cur_peer]->chunk_len;
+	if (fd2peer[peer_idx]->chunk_len < sizeof(fd2peer[peer_idx]->buf))
+		n = fd2peer[peer_idx]->chunk_len;
 
-	r = read(cur_peer, fd2state[cur_peer]->buf, n);
+	r = read(peer_idx, fd2peer[peer_idx]->buf, n);
 
 	if (r <= 0)
 		return -1;
 
-	fd2state[cur_peer]->blen = r;
+	fd2peer[peer_idx]->blen = r;
 
 	// ... to change state again after each request
-	fd2state[cur_peer]->chunk_len -= r;
-	if (fd2state[cur_peer]->chunk_len == 0) {
-		fd2state[cur_peer]->header = 1;
-		fd2state[cur_peer]->state = STATE_DECIDING;
-		fd2state[cur_peer]->header_time = 0;
+	fd2peer[peer_idx]->chunk_len -= r;
+	if (fd2peer[peer_idx]->chunk_len == 0) {
+		fd2peer[peer_idx]->header = 1;
+		fd2peer[peer_idx]->state = STATE_DECIDING;
+		fd2peer[peer_idx]->header_time = 0;
 	}
 
 	return r;
@@ -385,7 +387,7 @@ ssize_t rproxy::more_client_bytes()
 
 ssize_t rproxy::more_bytes()
 {
-	if (fd2state[cur_peer]->type == HTTP_CLIENT)
+	if (fd2peer[peer_idx]->type == HTTP_CLIENT)
 		return more_client_bytes();
 
 	return more_server_bytes();
@@ -395,94 +397,94 @@ ssize_t rproxy::more_bytes()
 ssize_t rproxy::more_server_bytes()
 {
 	ssize_t r = 0;
-	size_t n = sizeof(fd2state[cur_peer]->buf);
+	size_t n = sizeof(fd2peer[peer_idx]->buf);
 	char buf[4096], *ptr = NULL;
 
 
-	if (fd2state[cur_peer]->header) {
+	if (fd2peer[peer_idx]->header) {
 		errno = 0;
 		memset(buf, 0, sizeof(buf));
-		if ((r = recv(cur_peer, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
+		if ((r = recv(peer_idx, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
 			if (errno == EAGAIN)
 				return 0;
 			return -1;
 		}
 
 		// If first read, set initial timestamp for header TO
-		if (fd2state[cur_peer]->header_time == 0)
-			fd2state[cur_peer]->header_time = cur_time;
+		if (fd2peer[peer_idx]->header_time == 0)
+			fd2peer[peer_idx]->header_time = cur_time;
 
 		if ((ptr = strstr(buf, "\r\n\r\n")) == NULL) {
-			if (cur_time - fd2state[cur_peer]->header_time > TIMEOUT_HEADER)
+			if (cur_time - fd2peer[peer_idx]->header_time > TIMEOUT_HEADER)
 				return -1;
 			return 0;
 		}
 
 		size_t hlen = ptr - buf + 4;
 
-		if (hlen >= sizeof(fd2state[cur_peer]->buf))
+		if (hlen >= sizeof(fd2peer[peer_idx]->buf))
 			return -1;
 
-		if ((r = read(cur_peer, fd2state[cur_peer]->buf, hlen)) != (ssize_t)hlen)
+		if ((r = read(peer_idx, fd2peer[peer_idx]->buf, hlen)) != (ssize_t)hlen)
 			return -1;
 
-		fd2state[cur_peer]->buf[hlen] = 0;
-		fd2state[cur_peer]->blen = hlen;
-		fd2state[cur_peer]->header = 0;
+		fd2peer[peer_idx]->buf[hlen] = 0;
+		fd2peer[peer_idx]->blen = hlen;
+		fd2peer[peer_idx]->header = 0;
 
 		if (mangle_server_reply() < 0)
 			return -1;
 
 	// read chunk size, if chunked encoding and complete chunk or header has been slurped
-	} else if (fd2state[cur_peer]->chunked && fd2state[cur_peer]->chunk_len == 0) {
+	} else if (fd2peer[peer_idx]->chunked && fd2peer[peer_idx]->chunk_len == 0) {
 		errno = 0;
 		memset(buf, 0, sizeof(buf));
-		if ((r = recv(cur_peer, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0)
+		if ((r = recv(peer_idx, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0)
 			return -1;
 
 		// that was the last chunk?
 		if (strncmp(buf, "0\r\n\r\n", 5) == 0) {
-			if ((r = read(cur_peer, fd2state[cur_peer]->buf, 5)) != 5)
+			if ((r = read(peer_idx, fd2peer[peer_idx]->buf, 5)) != 5)
 				return -1;
-			fd2state[cur_peer]->blen = 5;
-			fd2state[cur_peer]->header = 1;
-			fd2state[cur_peer]->header_time = 0;
+			fd2peer[peer_idx]->blen = 5;
+			fd2peer[peer_idx]->header = 1;
+			fd2peer[peer_idx]->header_time = 0;
 		} else {
 			if ((ptr = strstr(buf, "\r\n")) == NULL)
 				return -1;
-			fd2state[cur_peer]->chunk_len = strtoul(buf, NULL, 16);
+			fd2peer[peer_idx]->chunk_len = strtoul(buf, NULL, 16);
 
-			if (fd2state[cur_peer]->chunk_len > 0x100000000)
+			if (fd2peer[peer_idx]->chunk_len > 0x100000000)
 				return -1;
 
 			// also need to read in that 'chunksize\r\n' and the \r\n after the chunk
-			fd2state[cur_peer]->chunk_len += (ptr - buf + 2) + 2;
-			n = sizeof(fd2state[cur_peer]->buf);
+			fd2peer[peer_idx]->chunk_len += (ptr - buf + 2) + 2;
+			n = sizeof(fd2peer[peer_idx]->buf);
 
-			if (fd2state[cur_peer]->chunk_len < n)
-				n = fd2state[cur_peer]->chunk_len;
+			if (fd2peer[peer_idx]->chunk_len < n)
+				n = fd2peer[peer_idx]->chunk_len;
 
-			if ((r = read(cur_peer, fd2state[cur_peer]->buf, n)) <= 0)
+			if ((r = read(peer_idx, fd2peer[peer_idx]->buf, n)) <= 0)
 				return -1;
 
-			fd2state[cur_peer]->blen = r;
-			fd2state[cur_peer]->chunk_len -= r;
+			fd2peer[peer_idx]->blen = r;
+			fd2peer[peer_idx]->chunk_len -= r;
 		}
 	} else {
-		if (fd2state[cur_peer]->chunk_len < n)
-			n = fd2state[cur_peer]->chunk_len;
+		if (fd2peer[peer_idx]->chunk_len < n)
+			n = fd2peer[peer_idx]->chunk_len;
 
-		r = read(cur_peer, fd2state[cur_peer]->buf, n);
+		r = read(peer_idx, fd2peer[peer_idx]->buf, n);
 
 		if (r <= 0)
 			return -1;
 
-		fd2state[cur_peer]->blen = r;
-		fd2state[cur_peer]->chunk_len -= r;
+		fd2peer[peer_idx]->blen = r;
+		fd2peer[peer_idx]->chunk_len -= r;
 
-		if (fd2state[cur_peer]->chunk_len == 0 && !fd2state[cur_peer]->chunked) {
-			fd2state[cur_peer]->header = 1;
-			fd2state[cur_peer]->header_time = 0;
+		if (fd2peer[peer_idx]->chunk_len == 0 && !fd2peer[peer_idx]->chunked) {
+			fd2peer[peer_idx]->header = 1;
+			fd2peer[peer_idx]->header_time = 0;
 		}
 	}
 
@@ -492,25 +494,25 @@ ssize_t rproxy::more_server_bytes()
 
 int rproxy::mangle_server_reply()
 {
-	if (fd2state[cur_peer]->type != HTTP_SERVER)
+	if (fd2peer[peer_idx]->type != HTTP_SERVER)
 		return 0;
 
-	size_t blen = fd2state[cur_peer]->blen;
-	char *hdr_end = NULL, *location = NULL, *nl = NULL, *buf = fd2state[cur_peer]->buf, *ptr = NULL;
+	size_t blen = fd2peer[peer_idx]->blen;
+	char *hdr_end = NULL, *location = NULL, *nl = NULL, *buf = fd2peer[peer_idx]->buf, *ptr = NULL;
 
 	if ((hdr_end = strstr(buf, "\r\n\r\n")) == NULL)
 		return 0;
 	if ((size_t)(hdr_end - buf) >= blen)
 		return 0;
 
-	fd2state[cur_peer]->chunk_len = 0x100000000;
-	fd2state[cur_peer]->chunked = 0;
+	fd2peer[peer_idx]->chunk_len = 0x100000000;
+	fd2peer[peer_idx]->chunked = 0;
 	if ((ptr = strcasestr(buf, "\nContent-Length:"))) {
 		ptr += 16;
 		if (ptr >= hdr_end)
 			return -1;
-		fd2state[cur_peer]->chunk_len = strtoul(ptr, NULL, 10);
-		if (fd2state[cur_peer]->chunk_len > 0x100000000) {
+		fd2peer[peer_idx]->chunk_len = strtoul(ptr, NULL, 10);
+		if (fd2peer[peer_idx]->chunk_len > 0x100000000) {
 			send_error(HTTP_ERROR_414);
 			return -1;
 		}
@@ -519,10 +521,10 @@ int rproxy::mangle_server_reply()
 		if (ptr >= hdr_end)
 			return -1;
 		if (strcasestr(ptr, "chunked")) {
-			fd2state[cur_peer]->chunked = 1;
+			fd2peer[peer_idx]->chunked = 1;
 
 			// will be assigned in more_server_bytes()
-			fd2state[cur_peer]->chunk_len = 0;
+			fd2peer[peer_idx]->chunk_len = 0;
 		}
 	}
 
@@ -558,10 +560,10 @@ int rproxy::mangle_server_reply()
 
 	hdr.replace(location - buf, i->first.size(), new_loc);
 
-	if (hdr.size() >= sizeof(fd2state[cur_peer]->buf))
+	if (hdr.size() >= sizeof(fd2peer[peer_idx]->buf))
 		return -1;
 	memcpy(buf, hdr.c_str(), hdr.size());
-	fd2state[cur_peer]->blen = hdr.size();
+	fd2peer[peer_idx]->blen = hdr.size();
 	return 0;
 }
 
@@ -577,18 +579,18 @@ int rproxy::mangle_request_header()
 
 	memset(buf, 0, sizeof(buf));
 	errno = 0;
-	if ((r = recv(cur_peer, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
+	if ((r = recv(peer_idx, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
 		if (errno == EAGAIN)
 			return 0;
 		return -1;
 	}
 
 	// If first read, set initial timestamp for header TO
-	if (fd2state[cur_peer]->header_time == 0)
-		fd2state[cur_peer]->header_time = cur_time;
+	if (fd2peer[peer_idx]->header_time == 0)
+		fd2peer[peer_idx]->header_time = cur_time;
 
 	if ((ptr = strstr(buf, "\r\n\r\n")) == NULL) {
-		if (cur_time - fd2state[cur_peer]->header_time > TIMEOUT_HEADER) {
+		if (cur_time - fd2peer[peer_idx]->header_time > TIMEOUT_HEADER) {
 			send_error(HTTP_ERROR_400);
 			return -1;
 		}
@@ -598,7 +600,7 @@ int rproxy::mangle_request_header()
 	size_t hlen = ptr - buf + 4;
 	end_ptr = buf + hlen;
 
-	if (read(cur_peer, buf, hlen) != (ssize_t)hlen) {
+	if (read(peer_idx, buf, hlen) != (ssize_t)hlen) {
 		send_error(HTTP_ERROR_500);
 		return -1;
 	}
@@ -624,7 +626,7 @@ int rproxy::mangle_request_header()
 		return -1;
 	}
 
-	const string &from_ip = fd2state[cur_peer]->from_ip;
+	const string &from_ip = fd2peer[peer_idx]->from_ip;
 
 	path_begin = ptr;
 	if ((path_end = strchr(ptr, '?')) == NULL) {
@@ -644,15 +646,15 @@ int rproxy::mangle_request_header()
 		return -1;
 	}
 
-	fd2state[cur_peer]->chunk_len = 0;
+	fd2peer[peer_idx]->chunk_len = 0;
 	if ((ptr = strcasestr(buf, "\nContent-Length:"))) {
 		ptr += 16;
 		if (ptr >= end_ptr) {
 			send_error(HTTP_ERROR_400);
 			return -1;
 		}
-		fd2state[cur_peer]->chunk_len = strtoul(ptr, NULL, 10);
-		if (fd2state[cur_peer]->chunk_len > 0x100000000) {
+		fd2peer[peer_idx]->chunk_len = strtoul(ptr, NULL, 10);
+		if (fd2peer[peer_idx]->chunk_len > 0x100000000) {
 			send_error(HTTP_ERROR_414);
 			return -1;
 		}
@@ -711,9 +713,9 @@ int rproxy::mangle_request_header()
 
 	// Is it the same path as in a possible earlier request?
 	// Then we dont need to open a new connection
-	if (match->first == fd2state[cur_peer]->opath && fd2state[cur_peer]->peer_fd > 0) {
+	if (match->first == fd2peer[peer_idx]->opath && fd2peer[peer_idx]->peer_fd > 0) {
 		same_conn = 1;
-		b = fd2state[cur_peer]->node;
+		b = fd2peer[peer_idx]->node;
 	} else {
 		// Already decided about a node for this IP/path combination?
 		map<pair<string, string>, struct backend>::iterator j =
@@ -765,19 +767,19 @@ int rproxy::mangle_request_header()
 	xfwd += "\r\n\r\n";
 	new_hdr.replace(new_hdr.size() - 2, 2, xfwd);
 
-	if (new_hdr.size() >= sizeof(fd2state[cur_peer]->buf)) {
+	if (new_hdr.size() >= sizeof(fd2peer[peer_idx]->buf)) {
 		send_error(HTTP_ERROR_414);
 		return -1;
 	}
 
-	memcpy(fd2state[cur_peer]->buf, new_hdr.c_str(), new_hdr.size());
-	fd2state[cur_peer]->blen = new_hdr.size();
+	memcpy(fd2peer[peer_idx]->buf, new_hdr.c_str(), new_hdr.size());
+	fd2peer[peer_idx]->blen = new_hdr.size();
 
 	if (same_conn)
-		return fd2state[cur_peer]->peer_fd;
+		return fd2peer[peer_idx]->peer_fd;
 
-	fd2state[cur_peer]->opath = match->first;
-	fd2state[cur_peer]->node = b;
+	fd2peer[peer_idx]->opath = match->first;
+	fd2peer[peer_idx]->node = b;
 	return tcp_connect_nb(b.ai, 0);
 }
 
@@ -834,11 +836,11 @@ int rproxy::send_error(http_error_code_t e, bool kill_conn)
 
 	http_header += "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 
-	if (writen(cur_peer, http_header.c_str(), http_header.size()) <= 0)
+	if (writen(peer_idx, http_header.c_str(), http_header.size()) <= 0)
 		return -1;
 
 	if (kill_conn)
-		shutdown(cur_peer);
+		shutdown(peer_idx);
 	return 0;
 }
 

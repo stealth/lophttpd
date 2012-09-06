@@ -23,8 +23,9 @@ clean:
 distclean: clean
 	rm -f lhttpd
 
-lhttpd: lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o
-	$(LD) lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o $(LIB) -static -o lhttpd
+lhttpd: lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o client.o
+	$(LD) lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o\
+	      client.o $(LIB) -static -o lhttpd
 
 multicore.o: multicore.cc multicore.h
 	$(CXX) -c multicore.cc
@@ -49,4 +50,7 @@ flavor.o: flavor-android.cc flavor.h
 
 config.o: config.cc config.h
 	$(CXX) -c config.cc
+
+client.o: client.cc client.h
+	$(CXX) -c client.cc
 
