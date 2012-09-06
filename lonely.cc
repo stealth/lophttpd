@@ -272,6 +272,7 @@ void lonely<state_engine>::calc_max_fd()
 	}
 }
 
+
 template<typename state_engine>
 int lonely<state_engine>::open_log(const string &logfile, const string &method, int core = 0)
 {
@@ -1179,7 +1180,7 @@ int lonely_http::handle_request()
 	if (end_ptr - ptr > 1 && *end_ptr == '/')
 		*end_ptr = 0;
 
-	// no .. in PUT reqquests
+	// no .. in PUT requests
 	if (cur_request == HTTP_REQUEST_PUT) {
 		if (httpd_config::upload.size() == 0)
 			return send_error(HTTP_ERROR_400);
