@@ -47,6 +47,12 @@
 #include "client.h"
 #include "log.h"
 
+#ifdef USE_SSL
+extern "C" {
+#include <openssl/ssl.h>
+}
+#endif
+
 
 typedef enum {
 	HTTP_ERROR_400 = 0,
@@ -108,9 +114,11 @@ protected:
 public:
 	lonely()
 	 : first_fd(0), max_fd(0), peer(NULL), fd2peer(NULL), peer_idx(-1), n_clients(0), logger(NULL),
-	   cur_time(0), cur_usec(0), err(""), heavy_load(0), so_sndbuf(4096) {};
+	   cur_time(0), cur_usec(0), err(""), heavy_load(0), so_sndbuf(4096)
+	{
+	}
 
-	virtual ~lonely() { delete [] pfds; delete logger; };
+	virtual ~lonely() { delete [] pfds; delete logger; }
 
 	int init(const std::string &, const std::string &, int a = AF_INET);
 
@@ -121,6 +129,7 @@ public:
 	virtual int loop() = 0;
 
 	const char *why();
+
 };
 
 
@@ -145,8 +154,6 @@ struct inode {
 };
 
 
-extern std::string http_error_msgs[];
-
 
 class lonely_http : public lonely<http_client> {
 private:
@@ -166,6 +173,11 @@ private:
 	std::map<std::string, std::pair<struct stat, int> > stat_cache;
 
 	static const std::string hdr_fmt, chunked_hdr_fmt, part_hdr_fmt, put_hdr_fmt;
+
+#ifdef USE_SSL
+	SSL_CTX *ssl_ctx;
+	SSL_METHOD *ssl_method;
+#endif
 
 	int OPTIONS();
 
@@ -216,9 +228,22 @@ public:
 			n_send = max_send;
 		if (n_send < min_send)
 			n_send = min_send;
+#ifdef USE_SSL
+		ssl_ctx = NULL;
+		ssl_method = NULL;
+#endif
 	}
 
-	virtual ~lonely_http() {}
+	virtual ~lonely_http()
+	{
+#ifdef USE_SSL
+		if (ssl_ctx)
+			SSL_CTX_free(ssl_ctx);
+		ssl_ctx = NULL;
+#endif
+	}
+
+	int setup_ssl(const std::string &, const std::string &);
 
 	int send_genindex();
 
@@ -227,6 +252,8 @@ public:
 	int loop();
 };
 
+
+extern std::string http_error_msgs[];
 
 #endif
 

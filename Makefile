@@ -2,7 +2,10 @@
 # This is the Makefile for the Linux flavor
 #
 
-CXX=c++ -Wall -O2
+DEFS=-DUSE_SSL
+LIBS=-lssl -lcrypto
+
+CXX=c++ -Wall -O2 $(DEFS)
 LD=c++
 
 all: lhttpd frontend
@@ -15,12 +18,12 @@ distclean: clean
 
 lhttpd: lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o client.o
 	$(LD) $(LDFLAGS) lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o\
-	                 client.o -o lhttpd -lrt
+	                 client.o -o lhttpd -lrt $(LIBS)
 
 
 frontend: lonely.o socket.o frontend-main.o log.o multicore.o rproxy.o config.o misc.o flavor.o client.o
 	$(LD) $(LDFLAGS) lonely.o socket.o frontend-main.o misc.o log.o multicore.o rproxy.o\
-	                 config.o flavor.o client.o -o frontend -lrt
+	                 config.o flavor.o client.o -o frontend -lrt $(LIBS)
 
 frontend-main.o: frontend-main.cc
 	$(CXX) $(CFLAGS) -c frontend-main.cc

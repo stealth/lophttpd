@@ -65,7 +65,7 @@ void help(const char *p)
 {
 	cerr<<"Usage: "<<p<<" [-6] [-R web-root] [-B html-base-tag] [-iH] [-I IP] [-u user]\n"
 	    <<"\t\t [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n"
-	    <<"\t\t [-U upload] [-r] [-E] [-Q] [-N n]\n\n"
+	    <<"\t\t [-U upload] [-r] [-E] [-Q] [-N n] [-K PEM-file] [-C PEM-file]\n\n"
 	    <<"\tcommonly used options:\n\n"
 	    <<"\t\t -R : web-root, default "<<httpd_config::root<<endl
 	    <<"\t\t -i : use autoindexing\n"
@@ -75,6 +75,8 @@ void help(const char *p)
 	    <<"\t\t -n : number of CPU cores to use, default all"<<endl
 	    <<"\t\t -p : port, default "<<httpd_config::port<<endl<<endl
 	    <<"\trarely used options:\n\n"
+	    <<"\t\t -K : use this keyfile (enables SSL)\n"
+	    <<"\t\t -C : use this certfile (enables SSL)\n"
 	    <<"\t\t -6 : use IPv6, default is IPv4\n"
 	    <<"\t\t -l : logfile, default "<<httpd_config::logfile<<endl
 	    <<"\t\t -L : logprovider, default '"<<httpd_config::log_provider<<"'"<<endl
@@ -131,7 +133,7 @@ int main(int argc, char **argv)
 		cerr<<"Continuing in UNSAFE mode!\n\n";
 	}
 
-	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQN:")) != -1) {
+	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQN:C:K:")) != -1) {
 		switch (c) {
 		case '6':
 			httpd_config::host = "::0";
@@ -189,6 +191,12 @@ int main(int argc, char **argv)
 		case 'N':
 			httpd_config::max_connections = strtoul(optarg, NULL, 10);
 			break;
+		case 'K':
+			httpd_config::kfile = optarg;
+			break;
+		case 'C':
+			httpd_config::cfile = optarg;
+			break;
 		case 'h':
 		default:
 			help(*argv);
@@ -211,6 +219,15 @@ int main(int argc, char **argv)
 	if (!httpd) {
 		cerr<<"OOM: Cannot create webserver object!\n";
 		return -1;
+	}
+
+	if (httpd_config::cfile.size() && httpd_config::kfile.size()) {
+		httpd_config::use_ssl = 1;
+		if (httpd->setup_ssl(httpd_config::cfile, httpd_config::kfile) < 0) {
+			cerr<<"Unable to initialize SSL, exiting:\n";
+			cerr<<httpd->why()<<endl;
+			return -1;
+		}
 	}
 
 	if (httpd->init(httpd_config::host, httpd_config::port, httpd_config::af) < 0) {

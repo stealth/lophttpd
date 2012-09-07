@@ -41,11 +41,18 @@
 #include <sys/types.h>
 #include "config.h"
 
+#ifdef USE_SSL
+extern "C" {
+#include <openssl/ssl.h>
+}
+#endif
+
 
 typedef enum {
 	STATE_CONNECTING = 0,
 	STATE_ACCEPTING,
 	STATE_DECIDING,
+	STATE_HANDSHAKING,
 	STATE_CONNECTED,
 	STATE_DOWNLOADING,
 	STATE_UPLOADING,
@@ -68,7 +75,8 @@ private:
 	status_t d_state;
 public:
 	int file_fd, peer_fd;
-	time_t alive_time, header_time;
+	time_t alive_time, header_time, ssl_time;
+	static const int TIMEOUT_SSL;
 	bool keep_alive;
 	off_t offset;
 	size_t copied, left;
@@ -78,11 +86,21 @@ public:
 	int ct, in_queue;
 	file_t ftype;
 	size_t blen;
+	bool ssl_enabled;
+
+#ifdef USE_SSL
+	SSL *ssl;
+#endif
 
 	http_client()
-	 : d_state(STATE_ERROR), file_fd(-1), peer_fd(-1), alive_time(0), header_time(0),
+	 : d_state(STATE_ERROR), file_fd(-1), peer_fd(-1), alive_time(0), header_time(0), ssl_time(0),
 	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), from_ip(""),
-	   ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0) {};
+	   ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0), ssl_enabled(0)
+	{
+#ifdef USE_SSL
+		ssl = NULL;
+#endif
+	}
 
 	~http_client() {};
 
@@ -99,6 +117,11 @@ public:
 	status_t state() const { return d_state; };
 
 	void transition(status_t s) { d_state = s; };
+
+#ifdef USE_SSL
+	int ssl_accept(SSL_CTX *);
+#endif
+
 };
 
 
@@ -115,7 +138,7 @@ class rproxy_client {
 private:
 	status_t d_state;
 public:
-	int fd, peer_fd, keep_alive;
+	int fd, file_fd, peer_fd, keep_alive;
 	time_t alive_time, header_time;
 	off_t offset;
 	struct rproxy_config::backend node;
@@ -128,7 +151,7 @@ public:
 	http_instance_t type;
 
 	rproxy_client()
-	 : d_state(STATE_ERROR), fd(-1), peer_fd(-1), keep_alive(0), alive_time(0), header_time(0),
+	 : d_state(STATE_ERROR), fd(-1), file_fd(-1), peer_fd(-1), keep_alive(0), alive_time(0), header_time(0),
 	   opath(""), from_ip(""), blen(0),
 	   chunk_len(0), header(1), chunked(0), type(HTTP_NONE) {};
 

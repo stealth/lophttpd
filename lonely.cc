@@ -61,6 +61,12 @@
 #include "flavor.h"
 #include "client.h"
 
+#ifdef USE_SSL
+extern "C" {
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+}
+#endif
 
 using namespace std;
 using namespace ns_socket;
@@ -219,8 +225,8 @@ void lonely<state_engine>::shutdown(int fd)
 		return;
 
 	if (fd2peer[fd]->state() == STATE_UPLOADING) {
-		close(fd2peer[fd]->peer_fd);
-		fd2peer[fd]->peer_fd = -1;
+		close(fd2peer[fd]->file_fd);
+		fd2peer[fd]->file_fd = -1;
 	}
 
 	::shutdown(fd, SHUT_RDWR);
@@ -314,6 +320,49 @@ void lonely<state_engine>::log(const string &msg)
 }
 
 
+
+int lonely_http::setup_ssl(const string &cpath, const string &kpath)
+{
+
+#ifdef USE_SSL
+	SSL_library_init();
+	SSL_load_error_strings();
+	OpenSSL_add_all_algorithms();
+	OpenSSL_add_all_digests();
+
+	if ((ssl_method = TLSv1_server_method()) == NULL) {
+		err = "lonely_http::setup_ssl::TLSv1_server_method:";
+		err += ERR_error_string(ERR_get_error(), NULL);
+		return -1;
+	}
+	if ((ssl_ctx = SSL_CTX_new(ssl_method)) == NULL) {
+		err = "lonely_http::setup_ssl::SSL_CTX_new:";
+		err += ERR_error_string(ERR_get_error(), NULL);
+		return -1;
+	}
+
+	if (SSL_CTX_use_certificate_file(ssl_ctx, cpath.c_str(), SSL_FILETYPE_PEM) != 1) {
+		err = "lonely_http::setup_ssl::SSL_CTX_use_certificate_file:";
+		err += ERR_error_string(ERR_get_error(), NULL);
+		return -1;
+	}
+	if (SSL_CTX_use_PrivateKey_file(ssl_ctx, kpath.c_str(), SSL_FILETYPE_PEM) != 1) {
+		err = "lonely_http::setup_ssl::SSL_CTX_use_PrivateKey_file:";
+		err += ERR_error_string(ERR_get_error(), NULL);
+		return -1;
+	}
+	if (SSL_CTX_check_private_key(ssl_ctx) != 1) {
+		err = "lonely_http::setup_ssl::SSL_CTX_check_private_key:";
+		err += ERR_error_string(ERR_get_error(), NULL);
+		return -1;
+	}
+#endif
+
+	return 0;
+}
+
+
+
 int lonely_http::loop()
 {
 	int i = 0;
@@ -357,10 +406,9 @@ int lonely_http::loop()
 			// this check must come first, as pfds[i].fd is already -1 in
 			// STATE_CLOSING
 			if (fd2peer[i] && fd2peer[i]->state() == STATE_CLOSING) {
-				if (heavy_load || (cur_time - fd2peer[i]->alive_time > TIMEOUT_CLOSING)) {
+				if (heavy_load || (cur_time - fd2peer[i]->alive_time > TIMEOUT_CLOSING))
 					cleanup(i);
-					continue;
-				}
+				continue;
 			}
 
 			if (pfds[i].fd == -1)
@@ -423,7 +471,11 @@ int lonely_http::loop()
 						}
 					}
 
-					fd2peer[afd]->transition(STATE_CONNECTED);
+					if (httpd_config::use_ssl)
+						fd2peer[afd]->transition(STATE_HANDSHAKING);
+					else
+						fd2peer[afd]->transition(STATE_CONNECTED);
+
 					fd2peer[afd]->alive_time = cur_time;
 					fd2peer[afd]->peer_fd = afd;
 
@@ -441,6 +493,13 @@ int lonely_http::loop()
 				// There is nothing more to do for the accept socket;
 				// just continue with the other sockets
 				continue;
+#ifdef USE_SSL
+			} else if (peer->state() == STATE_HANDSHAKING) {
+				if (peer->ssl_accept(ssl_ctx) < 0) {
+					cleanup(i);
+					continue;
+				}
+#endif
 			} else if (peer->state() == STATE_CONNECTED) {
 				if (handle_request() < 0) {
 					cleanup(i);
@@ -461,12 +520,18 @@ int lonely_http::loop()
 			// do not glue together the above and below if()'s because
 			// download() may change state so we need a 2nd state-engine walk
 
-			if (peer->state() == STATE_DOWNLOADING) {
+			switch (peer->state()) {
+			case STATE_DOWNLOADING:
 				pfds[i].events = POLLOUT;
-			} else if (peer->state() == STATE_UPLOADING) {
+				break;
+			case STATE_UPLOADING:
+			case STATE_CONNECTED:
+			case STATE_HANDSHAKING:
 				pfds[i].events = POLLIN;
-			} else if (peer->state() == STATE_CONNECTED)
-				pfds[i].events = POLLIN;
+				break;
+			default:
+				;
+			}
 
 			if (!peer->keep_alive && peer->state() == STATE_CONNECTED)
 				shutdown(i);
@@ -538,10 +603,11 @@ int lonely_http::send_genindex()
 
 int lonely_http::download()
 {
-	int r = 0, fd = peer->file_fd;
+	int r = 0;
 
-	if (fd < 0) {
-		if ((fd = open()) < 0) {
+	if (peer->file_fd < 0) {
+		// assigns peer->file_fd
+		if (open() < 0) {
 			// callers of download() must not send_error() themself on -1,
 			// as they cannot know whether a failure appeared before or after
 			// send_header() call. Thus download() sends its erros themself.
@@ -591,6 +657,7 @@ int lonely_http::download()
 	if (n > n_send)
 		n = n_send;
 
+	errno = 0;
 	r = peer->sendfile(n);
 
 	// Dummy reset of r, if EAGAIN appears on nonblocking socket
