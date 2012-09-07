@@ -176,7 +176,13 @@ private:
 
 #ifdef USE_SSL
 	SSL_CTX *ssl_ctx;
+
+#if OPENSSL_VERSION_NUMBER >= 0x10000000L
+	const SSL_METHOD *ssl_method;
+#else
 	SSL_METHOD *ssl_method;
+#endif
+
 #endif
 
 	int OPTIONS();
