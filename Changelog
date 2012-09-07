@@ -1,3 +1,14 @@
+0.98
+----
+
++ Added https (TLSv1) support
+
+0.97
+----
+
++ better encapsulation for client state machine
+  (work to be done for adding SSL support)
+
 0.95
 ----
 

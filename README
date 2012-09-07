@@ -26,6 +26,7 @@ Features:
 
 + runs as unprived user in a chroot
 + IPv6 ready
++ https support
 + does not require syslogd
 + supports multiple log-providers ("mmap" is very fast)
 + only handles static content (e.g. no CGI scripts etc)
@@ -49,6 +50,10 @@ you will get wrong results. If you use "-i", you probably want
 to copy the icons/ directory to your web-root, to have a pretty
 output. The icons are not by me, I grabbed them from some distro
 and they seem to be public domain.
+
+
+Virtual Hosting
+---------------
 
 "-H" enables vhosts.
 
@@ -84,6 +89,10 @@ delete files from there, you need to tell lophttpd by sending
 it a SIGUSR1 signal. It will drop its open file caches and
 generates new indexes.
 
+
+General stuff
+-------------
+
 If lhttpd experiences that the generated indexes exceed a certain limit,
 (default 10,000 bytes per dir) it writes the appropriate index.html to disk
 inside the directory. It wont overwrite existing files. But creation of
@@ -111,6 +120,10 @@ even with different log providers. (For aio to be really
 single threaded you may want to check out my Linux aio implementation
 since glibc is using pthreads under the hood.)
 
+
+Multicore support
+-----------------
+
 Since version 0.86 lophttpd supports multi-core setups for Linux.
 If run without any -n switch, lophttpd will run one process per core.
 You can turn this off by using "-n 1" or you specify the number
@@ -131,6 +144,10 @@ indexing information in memory then (per core!). This does not happen
 if the directory is writable since lophttpd will dump content into a
 index.html file if above a certain threshold.
 
+
+IPv6
+----
+
 Since version > 0.91 lophttpd also supports IPv6, by simply using "-6"
 command-line switch. The default bind goes to "::0" then, so
 if you want to bind to a specific IPv6 address, you have to
@@ -138,11 +155,19 @@ add -I switch *after* -6. You can either run IPv4 or IPv6 in once
 instance, not both. But you can run two lophttpd's: one with IPv4
 and one with IPv6 if needed.
 
+
+Proxies
+-------
+
 If you operate lophhtpd behind a proxy, you can use the '-B string'
 argument so it automatically generates <base href="string"> argument
 which should be your proxy URL: http://proxy:port/path/.
 The base string must end with '/' character and the index which lhttpd
 generates is relative to this base. -B makes only sense with -i.
+
+
+Special files
+-------------
 
 lophttpd also serves block device files. You need to run it as
 root (-u root) or as the user who can open the block dev files. This
@@ -191,6 +216,22 @@ download the uploaded file, as they do not know the URL. If you want that
 nobody, not even the up-loader can see the URL, you can use '-Q'.
 This effectively creates you an upload-only service where you can store
 submitted documents which nobody can download.
+
+
+HTTPS
+-----
+
+Since version 0.98, lophttpd supports HTTPS (TLSv1). Just generate
+a public/private keypair:
+
+$ openssl genrsa -out serverkey.pem 4096
+$ openssl req -new -x509 -nodes -sha1 -key serverkey.pem -out pubkey.x509
+
+and append "-C pubkey.x509 -K serverkey.pem -p 443" to the lophttpd
+commandline. You then either import the X509 certificate into your browser
+or let it sign by some CA that is in your browsers CA chain.
+
+
 
 If you have ideas and or offer performance/testing environment please
 drop me an email: sebastian.krahmer [at] gmail [dot] com :-)
