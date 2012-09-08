@@ -629,9 +629,9 @@ int lonely_http::download()
 		n_send = DEFAULT_SEND_SIZE;
 
 #ifndef STATIC_SEND_SIZE_COMPUTATION
-	int not_sent = flavor::in_send_queue(peer->peer_fd);
-
 	if (!forced_send_size && n_clients > MANY_RECEIVERS) {
+		int not_sent = flavor::in_send_queue(peer->peer_fd);
+
 		// send queue starts to fill?
 		if (not_sent == 0)
 			n_send = DEFAULT_SEND_SIZE;

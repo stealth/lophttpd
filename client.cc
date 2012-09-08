@@ -33,6 +33,7 @@
 
 #include <string>
 #include <time.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include "flavor.h"
@@ -105,14 +106,41 @@ int http_client::sendfile(size_t n)
 {
 
 #ifdef USE_SSL
-	int r = 0;
-	char buf[n];
+	ssize_t r = 0, l = 0;
+	char buf[n], siz[32];
 
 	if (ssl_enabled) {
 		if (alive_time - ssl_time > TIMEOUT_SSL)
 			return -1;
-		if ((r = pread(file_fd, buf, n, offset)) <= 0)
+		r = pread(file_fd, buf, n, offset);
+
+		if (ftype == FILE_PROC) {
+			if (r < 0) {
+				if (errno == EAGAIN)
+					errno = EBADF;
+				return -1;
+			} else if (r > 0) {
+				l = snprintf(siz, sizeof(siz), "%x\r\n", (int)r);
+				if (SSL_write(ssl, siz, l) != l)
+					return -1;
+				if (SSL_write(ssl, buf, r) != r)
+					return -1;
+				if (SSL_write(ssl, "\r\n", 2) != 2)
+					return -1;
+				offset += r;
+				copied += r;
+			} else {
+				if (SSL_write(ssl, "0\r\n\r\n", 5) != 5)
+					return -1;
+				left = 0;
+			}
+			ssl_time = alive_time;
+			return (int)r;
+		}
+
+		if (r <= 0)
 			return -1;
+
 		r = SSL_write(ssl, buf, r);
 		switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
@@ -128,7 +156,7 @@ int http_client::sendfile(size_t n)
 		offset += r;
 		left -= r;
 		copied += r;
-		return r;
+		return (int)r;
 	}
 #endif
 
@@ -149,6 +177,7 @@ int http_client::recv(void *buf, size_t n)
 		r = SSL_read(ssl, buf, n);
 		switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
+			ssl_time = alive_time;
 			break;
 		default:
 			r = -1;
@@ -171,6 +200,7 @@ int http_client::peek(void *buf, size_t n)
 		r = SSL_peek(ssl, buf, n);
 		switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
+			ssl_time = alive_time;
 			break;
 		default:
 			r = -1;
@@ -224,7 +254,7 @@ int http_client::ssl_accept(SSL_CTX *ssl_ctx)
 
 void rproxy_client::cleanup()
 {
-	fd = peer_fd = -1;
+	file_fd = fd = peer_fd = -1;
 	d_state = STATE_NONE;
 	type = HTTP_NONE;
 	node.host.clear(); node.path.clear(); opath.clear(); from_ip.clear();
