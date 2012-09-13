@@ -73,10 +73,13 @@ typedef enum {
 class http_client {
 private:
 	status_t d_state;
+	bool ssl_enabled;
+	static const int TIMEOUT_SSL;
+	time_t ssl_time;
+
 public:
 	int file_fd, peer_fd;
-	time_t alive_time, header_time, ssl_time;
-	static const int TIMEOUT_SSL;
+	time_t alive_time, header_time;
 	bool keep_alive;
 	off_t offset;
 	size_t copied, left;
@@ -86,16 +89,16 @@ public:
 	int ct, in_queue;
 	file_t ftype;
 	size_t blen;
-	bool ssl_enabled;
+
 
 #ifdef USE_SSL
 	SSL *ssl;
 #endif
 
 	http_client()
-	 : d_state(STATE_ERROR), file_fd(-1), peer_fd(-1), alive_time(0), header_time(0), ssl_time(0),
-	   keep_alive(0), offset(0), copied(0), left(0), dev(0), ino(0), path(""), from_ip(""),
-	   ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0), ssl_enabled(0)
+	 : d_state(STATE_ERROR), ssl_enabled(0), ssl_time(0), file_fd(-1), peer_fd(-1), alive_time(0),
+	   header_time(0), keep_alive(0), offset(0), copied(0), left(0), dev(0),
+	   ino(0), path(""), from_ip(""), ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0)
 	{
 #ifdef USE_SSL
 		ssl = NULL;
@@ -106,17 +109,19 @@ public:
 
 	void cleanup();
 
-	int sendfile(size_t);
+	ssize_t sendfile(size_t);
 
-	int send(const char *, size_t);
+	ssize_t send(const char *, size_t);
 
-	int recv(void *, size_t);
+	ssize_t recv(void *, size_t);
 
-	int peek(void *, size_t);
+	ssize_t peek(void *, size_t);
 
 	status_t state() const { return d_state; };
 
 	void transition(status_t s) { d_state = s; };
+
+	bool is_ssl() { return ssl_enabled; };
 
 #ifdef USE_SSL
 	int ssl_accept(SSL_CTX *);

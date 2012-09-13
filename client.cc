@@ -80,7 +80,7 @@ void http_client::cleanup()
 }
 
 
-int http_client::send(const char *buf, size_t n)
+ssize_t http_client::send(const char *buf, size_t n)
 {
 
 #ifdef USE_SSL
@@ -89,6 +89,7 @@ int http_client::send(const char *buf, size_t n)
 		r = SSL_write(ssl, buf, n);
 		switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
+			ssl_time = alive_time;
 			break;
 		default:
 			r = -1;
@@ -102,7 +103,7 @@ int http_client::send(const char *buf, size_t n)
 }
 
 
-int http_client::sendfile(size_t n)
+ssize_t http_client::sendfile(size_t n)
 {
 
 #ifdef USE_SSL
@@ -135,11 +136,14 @@ int http_client::sendfile(size_t n)
 				left = 0;
 			}
 			ssl_time = alive_time;
-			return (int)r;
+			return r;
 		}
 
-		if (r <= 0)
+		if (r <= 0) {
+			if (errno == EAGAIN)
+				errno = EBADF;
 			return -1;
+		}
 
 		r = SSL_write(ssl, buf, r);
 		switch (SSL_get_error(ssl, r)) {
@@ -147,6 +151,7 @@ int http_client::sendfile(size_t n)
 			ssl_time = alive_time;
 			break;
 		case SSL_ERROR_WANT_WRITE:
+		case SSL_ERROR_WANT_READ:
 			r = 0;
 			break;
 		default:
@@ -156,7 +161,7 @@ int http_client::sendfile(size_t n)
 		offset += r;
 		left -= r;
 		copied += r;
-		return (int)r;
+		return r;
 	}
 #endif
 
@@ -168,7 +173,7 @@ int http_client::sendfile(size_t n)
 }
 
 
-int http_client::recv(void *buf, size_t n)
+ssize_t http_client::recv(void *buf, size_t n)
 {
 
 #ifdef USE_SSL
@@ -191,7 +196,7 @@ int http_client::recv(void *buf, size_t n)
 }
 
 
-int http_client::peek(void *buf, size_t n)
+ssize_t http_client::peek(void *buf, size_t n)
 {
 
 #ifdef USE_SSL
@@ -201,6 +206,13 @@ int http_client::peek(void *buf, size_t n)
 		switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
 			ssl_time = alive_time;
+			break;
+		case SSL_ERROR_WANT_WRITE:
+		case SSL_ERROR_WANT_READ:
+			if (alive_time - ssl_time > TIMEOUT_SSL)
+				r = -1;
+			else
+				r = 0;
 			break;
 		default:
 			r = -1;

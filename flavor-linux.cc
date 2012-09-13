@@ -100,7 +100,7 @@ int in_send_queue(int fd)
 }
 
 
-int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, int ftype)
+ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, int ftype)
 {
 	ssize_t r = 0, l = 0;
 
@@ -126,8 +126,9 @@ int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &co
 			if (writen(peer, "0\r\n\r\n", 5) != 5)
 				return -1;
 			left = 0;
+			r = 5;
 		}
-		return 0;
+		return r;
 	}
 
 	// Linux can, unlike BSD, use sendfile() on device files, so
@@ -137,7 +138,7 @@ int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &co
 		return -1;
 	left -= r;
 	copied += r;
-	return 0;
+	return r;
 }
 
 

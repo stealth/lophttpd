@@ -103,7 +103,7 @@ int in_send_queue(int peer)
 }
 
 
-int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, int ftype)
+ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, int ftype)
 {
 	off_t sbytes = 0;
 	ssize_t r = 0, l = 0;
@@ -130,8 +130,9 @@ int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &co
 			if (writen(peer, "0\r\n\r\n", 5) != 5)
 				return -1;
 			left = 0;
+			r = 5;
 		}
-		return 0;
+		return r;
 	}
 
 
@@ -142,6 +143,8 @@ int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &co
 			left -= sbytes;
 			copied += sbytes;
 		}
+		if (r == 0)
+			r = (ssize_t)sbytes;
 	// On FreeBSD, device files do not support sendfile()
 	} else {
 		char buf[n];
@@ -155,12 +158,10 @@ int sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &co
 				copied += r;
 			}
 		}
-		if (r <= 0)
-			r = -1;
-		else
-			r = 0;
 	}
-	return (int)r;
+	if (r <= 0)
+		r = -1;
+	return r;
 }
 
 

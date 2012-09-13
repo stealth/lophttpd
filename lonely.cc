@@ -661,7 +661,8 @@ int lonely_http::download()
 	r = peer->sendfile(n);
 
 	// Dummy reset of r, if EAGAIN appears on nonblocking socket
-	if (errno == EAGAIN)
+	// proc-files are written in chunks, so everything is lost anyway
+	if (peer->ftype != FILE_PROC && errno == EAGAIN)
 		r = 1;
 
 	if (r < 0) {
@@ -1123,8 +1124,11 @@ int lonely_http::handle_request()
 	memset(req_buf, 0, sizeof(req_buf));
 
 	// peek to find hopefully a complete header
-	if ((n = peer->peek(req_buf, sizeof(req_buf) - 1)) <= 0) {
-		err = "lonely_http::handle_connection::peek:";
+	n = peer->peek(req_buf, sizeof(req_buf) - 1);
+
+	// give partial SSL arived messages chance to complete
+	if (n < 0 || (n == 0 && !peer->is_ssl())) {
+		err = "lonely_http::handle_request::peek:";
 		err += strerror(errno);
 		return -1;
 	}
@@ -1144,7 +1148,7 @@ int lonely_http::handle_request()
 
 	// read exactly the header from the queue, including \r\n\r\n
 	if ((n = peer->recv(req_buf, ptr - req_buf + 4)) <= 0) {
-		err = "lonely_http::handle_connection::recv:";
+		err = "lonely_http::handle_request::recv:";
 		err += strerror(errno);
 		return -1;
 	}
