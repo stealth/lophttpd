@@ -1252,7 +1252,6 @@ int lonely_http::handle_request()
 	if (end_ptr - ptr > 1 && *end_ptr == '/')
 		*end_ptr = 0;
 
-	// no .. in PUT requests
 	if (cur_request == HTTP_REQUEST_PUT) {
 		if (httpd_config::upload.size() == 0)
 			return send_error(HTTP_ERROR_400);
@@ -1298,8 +1297,8 @@ int lonely_http::handle_request()
 
 			*end_ptr = 0;
 
-			// Not a security issue, but makes no sense
-			if (string(ptr2) == "icons")
+			// makes no sense
+			if (string(ptr2) == "icons" || strstr(ptr2, ".."))
 				return send_error(HTTP_ERROR_404);
 
 			// If already requesting vhost files (genindex), then, do not prepend
