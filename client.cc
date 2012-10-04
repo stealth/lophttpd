@@ -36,6 +36,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <unistd.h>
 #include "flavor.h"
 #include "socket.h"
 #include "client.h"
