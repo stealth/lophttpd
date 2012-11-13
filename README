@@ -22,6 +22,12 @@ lophttpd can be used to serve heavy loaded sites to deliver static content:
 To serve software/package repositories, update servers, content delivery
 networks, ISO's, large image and video databases, tar-balls etc.
 
+
+By using the OpenSSL library functions, this product uses software developed
+by the OpenSSL Project for use in the OpenSSL Toolkit.
+(http://www.openssl.org/)
+
+
 Features:
 
 + runs as unprived user in a chroot
