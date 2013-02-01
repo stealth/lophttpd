@@ -1117,14 +1117,17 @@ int lonely_http::send_error(http_error_code_t e)
 
 int lonely_http::handle_request()
 {
-	char req_buf[2048], *ptr = NULL, *ptr2 = NULL, *end_ptr = NULL,
-	     *last_byte = &req_buf[sizeof(req_buf) - 1], body[2048];
+	char *ptr = NULL, *ptr2 = NULL, *end_ptr = NULL,
+	     *last_byte = &peer->req_buf[sizeof(peer->req_buf) - 1], body[2048];
 	int n;
-
-	memset(req_buf, 0, sizeof(req_buf));
+	char *req_buf = peer->req_buf;
 
 	// peek to find hopefully a complete header
-	n = peer->peek(req_buf, sizeof(req_buf) - 1);
+	// this will also take off the data from a SSL socket if sent
+	// as single bytes. Some browsers need so, and req_idx will say
+	// which bytes have already been taken off net.
+
+	n = peer->peek_req();
 
 	// give partial SSL arived messages chance to complete
 	if (n < 0 || (n == 0 && !peer->is_ssl())) {
@@ -1146,17 +1149,23 @@ int lonely_http::handle_request()
 		return 0;
 	}
 
-	// read exactly the header from the queue, including \r\n\r\n
-	if ((n = peer->recv(req_buf, ptr - req_buf + 4)) <= 0) {
-		err = "lonely_http::handle_request::recv:";
-		err += strerror(errno);
-		return -1;
+	// should not happen, as req_idx is increased by one and checked for \r\n\r\n each
+	// time
+	if (peer->req_idx > (size_t)(ptr - req_buf + 4))
+		return send_error(HTTP_ERROR_400);
+
+	n = 0;
+	// read exactly the header from the queue, (if not already) including \r\n\r\n
+	if (peer->req_idx < (size_t)(ptr - req_buf + 4)) {
+		if ((n = peer->recv(req_buf + peer->req_idx, ptr - req_buf + 4 - peer->req_idx)) <= 0) {
+			err = "lonely_http::handle_request::recv:";
+			err += strerror(errno);
+			return -1;
+		}
 	}
 
-	end_ptr = req_buf + n;
-
-	// At most sizeof(req_buf)-1
-	req_buf[n] = 0;
+	end_ptr = req_buf + peer->req_idx + n;
+	peer->req_idx = 0;
 
 	peer->keep_alive = 0;
 	int (lonely_http::*action)() = NULL;

@@ -90,6 +90,8 @@ public:
 	file_t ftype;
 	size_t blen;
 
+	char req_buf[2048];
+	size_t req_idx;
 
 #ifdef USE_SSL
 	SSL *ssl;
@@ -98,11 +100,13 @@ public:
 	http_client()
 	 : d_state(STATE_ERROR), ssl_enabled(0), ssl_time(0), file_fd(-1), peer_fd(-1), alive_time(0),
 	   header_time(0), keep_alive(0), offset(0), copied(0), left(0), dev(0),
-	   ino(0), path(""), from_ip(""), ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0)
+	   ino(0), path(""), from_ip(""), ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0),
+	   req_idx(0)
 	{
 #ifdef USE_SSL
 		ssl = NULL;
 #endif
+		memset(req_buf, 0, sizeof(req_buf));
 	}
 
 	~http_client() {};
@@ -115,7 +119,7 @@ public:
 
 	ssize_t recv(void *, size_t);
 
-	ssize_t peek(void *, size_t);
+	ssize_t peek_req();
 
 	status_t state() const { return d_state; };
 

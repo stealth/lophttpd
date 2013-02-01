@@ -72,6 +72,9 @@ void http_client::cleanup()
 	blen = 0;
 	ssl_enabled = 0;
 
+	memset(req_buf, 0, sizeof(req_buf));
+	req_idx = 0;
+
 #ifdef USE_SSL
 	if (ssl)
 		SSL_free(ssl);
@@ -197,13 +200,30 @@ ssize_t http_client::recv(void *buf, size_t n)
 }
 
 
-ssize_t http_client::peek(void *buf, size_t n)
+ssize_t http_client::peek_req()
 {
+	if (req_idx == 0)
+		memset(req_buf, 0, sizeof(req_buf));
 
 #ifdef USE_SSL
 	int r = 0;
 	if (ssl_enabled) {
-		r = SSL_peek(ssl, buf, n);
+		if (req_idx >= sizeof(req_buf))
+			return -1;
+
+		r = SSL_peek(ssl, req_buf + req_idx, sizeof(req_buf) - req_idx);
+
+		// workaround for stupid browsers (chrome) send a single byte
+		// G,E,T... and expect it to be taken from buffer immediately before sending
+		// rest of request!
+		if (r == 1) {
+			char skip = 0;
+			SSL_read(ssl, &skip, 1);
+			++req_idx;
+			ssl_time = alive_time;
+			return 1;
+		}
+
 		switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
 			ssl_time = alive_time;
@@ -223,7 +243,7 @@ ssize_t http_client::peek(void *buf, size_t n)
 	}
 #endif
 
-	return ::recv(peer_fd, buf, n, MSG_PEEK);
+	return ::recv(peer_fd, req_buf, sizeof(req_buf) - 1, MSG_PEEK);
 }
 
 
@@ -232,7 +252,7 @@ int http_client::ssl_accept(SSL_CTX *ssl_ctx)
 {
 	int r = 0;
 
-	// may be re-entered of no complete handshake has been seen yet
+	// may be re-entered if no complete handshake has been seen yet
 	if (!ssl) {
 		if ((ssl = SSL_new(ssl_ctx)) == NULL)
 			return -1;
