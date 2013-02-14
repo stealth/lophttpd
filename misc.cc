@@ -94,6 +94,7 @@ struct ctypes content_types[] = {
 	{".mpeg", "video/mpeg"},
 	{".mpg", "video/mpeg"},
 	{".ogg", "application/ogg"},
+	{".pac", "application/x-ns-proxy-autoconfig"},
 	{".pdf", "application/pdf"},
 	{".pls", "audio/x-scpls"},
 	{".png", "image/png"},
