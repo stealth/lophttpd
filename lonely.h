@@ -60,6 +60,7 @@ typedef enum {
 	HTTP_ERROR_404,
 	HTTP_ERROR_405,
 	HTTP_ERROR_406,
+	HTTP_ERROR_408,
 	HTTP_ERROR_411,
 	HTTP_ERROR_414,
 	HTTP_ERROR_416,
@@ -168,6 +169,7 @@ private:
 	uint16_t min_send, n_send, max_send;
 
 	std::map<inode, int> file_cache;
+	std::map<std::string, http_error_code_t> err_cache;
 
 	// pathname to (stat, content-type)
 	std::map<std::string, std::pair<struct stat, int> > stat_cache;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Sebastian Krahmer.
+ * Copyright (C) 2008-2013 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -79,6 +79,7 @@ string http_error_msgs[] = {
 	"404 Not Found",
 	"405 Method Not Allowed",
 	"406 Not Acceptable",
+	"408 Request Time-out",
 	"411 Length Required",
 	"414 Request-URI Too Large",
 	"416 Requested Range Not Satisfiable",
@@ -846,6 +847,7 @@ int lonely_http::POST()
 void lonely_http::clear_cache()
 {
 	stat_cache.clear();
+	err_cache.clear();
 
 	map<inode, int> dont_close;
 
@@ -1086,6 +1088,19 @@ int lonely_http::GET()
 
 int lonely_http::send_error(http_error_code_t e)
 {
+	// If configured so, build up a cache of HTTP requests (as seen per
+	// first line, e.g. "GET /foo") that caused errors in past. Inside
+	// handle_request() we can save ressources to decode/parse/stat if the GET will
+	// cause an error anyway.
+	// Carefull! Only cache "Not found" so far, otherwise by sending buggy headers
+	// attackers can overlay valid requests.
+	if (httpd_config::ncache && e == HTTP_ERROR_404 && !vhosts) {
+		if (err_cache.size() > httpd_config::ncache)
+			err_cache.clear();
+		if (peer->first_line.size() > 0)
+			err_cache[peer->first_line] = e;
+	}
+
 	string http_header = "HTTP/1.1 ";
 
 	if (e >= HTTP_ERROR_END)
@@ -1143,7 +1158,7 @@ int lonely_http::handle_request()
 	// incomplete header?
 	if ((ptr = strstr(req_buf, "\r\n\r\n")) == NULL) {
 		if (cur_time - peer->header_time > TIMEOUT_HEADER) {
-			return send_error(HTTP_ERROR_400);
+			return send_error(HTTP_ERROR_408);
 		}
 		peer->keep_alive = 1;
 		return 0;
@@ -1174,6 +1189,14 @@ int lonely_http::handle_request()
 	cur_start_range = cur_end_range = 0;
 	cur_range_requested = 0;
 
+	if (httpd_config::ncache) {
+		if ((ptr = strchr(req_buf, '\n'))) {
+			peer->first_line = string(req_buf, ptr - req_buf);
+		}
+		if (err_cache.count(peer->first_line) > 0) {
+			return send_error(err_cache[peer->first_line]);
+		}
+	}
 
 	// The above if() already ensured we have header until "\r\n\r\n"
 	// Only PUT and POST require cl

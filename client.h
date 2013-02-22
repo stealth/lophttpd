@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Sebastian Krahmer.
+ * Copyright (C) 2008-2013 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -85,7 +85,7 @@ public:
 	size_t copied, left;
 	dev_t dev;
 	ino_t ino;
-	std::string path, from_ip;
+	std::string path, from_ip, first_line;
 	int ct, in_queue;
 	file_t ftype;
 	size_t blen;
@@ -100,7 +100,7 @@ public:
 	http_client()
 	 : d_state(STATE_ERROR), ssl_enabled(0), ssl_time(0), file_fd(-1), peer_fd(-1), alive_time(0),
 	   header_time(0), keep_alive(0), offset(0), copied(0), left(0), dev(0),
-	   ino(0), path(""), from_ip(""), ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0),
+	   ino(0), path(""), from_ip(""), first_line(""), ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0),
 	   req_idx(0)
 	{
 #ifdef USE_SSL

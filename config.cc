@@ -28,6 +28,7 @@ namespace httpd_config
 
 	uint16_t mss = 0;
 	uint32_t max_connections = 10000;
+	uint32_t ncache = 10000;
 }
 
 

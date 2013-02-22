@@ -21,6 +21,7 @@ namespace httpd_config
 	extern int cores, master, af;
 	extern uint16_t mss;
 	extern uint32_t max_connections;
+	extern uint32_t ncache;
 }
 
 

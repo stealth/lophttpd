@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Sebastian Krahmer.
+ * Copyright (C) 2008-2013 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,7 +68,7 @@ void http_client::cleanup()
 	ct = in_queue = 0;
 	ftype = FILE_REGULAR;
 	d_state = STATE_NONE;
-	path.clear(); from_ip.clear();
+	path.clear(); from_ip.clear(); first_line.clear();
 	blen = 0;
 	ssl_enabled = 0;
 

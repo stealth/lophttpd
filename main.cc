@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Sebastian Krahmer.
+ * Copyright (C) 2008-2013 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,7 +65,7 @@ void help(const char *p)
 {
 	cerr<<"Usage: "<<p<<" [-6] [-R web-root] [-B html-base-tag] [-iH] [-I IP] [-u user]\n"
 	    <<"\t\t [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n"
-	    <<"\t\t [-U upload] [-r] [-E] [-Q] [-N n] [-K PEM-file] [-C PEM-file]\n\n"
+	    <<"\t\t [-U upload] [-r] [-E] [-Q] [-N n] [-e n] [-K PEM-file] [-C PEM-file]\n\n"
 	    <<"\tcommonly used options:\n\n"
 	    <<"\t\t -R : web-root, default "<<httpd_config::root<<endl
 	    <<"\t\t -i : use autoindexing\n"
@@ -86,6 +86,7 @@ void help(const char *p)
 	    <<"\t\t -N : maximum number of accepted clients, default: "<<httpd_config::max_connections<<endl
 	    <<"\t\t -U : upload dir inside web-root, default disabled"<<endl
 	    <<"\t\t -E : do not close connection on invalid requests, default disabled"<<endl
+	    <<"\t\t -e : cache requests (at most n) that cause 404 errors, to save parsing next time seen"<<endl
 	    <<"\t\t -Q : (implies -r) do not tell client the rand token (for write-only uploads)"<<endl
 	    <<"\t\t -r : add rand token to uploaded filenames (default off)"<<endl<<endl;
 	exit(errno);
@@ -126,14 +127,14 @@ void sigusr1(int x)
 int main(int argc, char **argv)
 {
 	int c = 0;
-	cout<<"\nlophttpd -- lots of performance httpd (C) 2008-2012 Sebastian Krahmer\n\n";
+	cout<<"\nlophttpd -- lots of performance httpd (C) 2008-2013 Sebastian Krahmer\n\n";
 
 	if (getuid() != 0) {
 		cerr<<"\a!!! WARNING: !!! Must be called as root in order to chroot() and drop privs properly!\n";
 		cerr<<"Continuing in UNSAFE mode!\n\n";
 	}
 
-	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQN:C:K:")) != -1) {
+	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQN:C:K:e:")) != -1) {
 		switch (c) {
 		case '6':
 			httpd_config::host = "::0";
@@ -187,6 +188,9 @@ int main(int argc, char **argv)
 			break;
 		case 'E':
 			httpd_config::no_error_kill = 1;
+			break;
+		case 'e':
+			httpd_config::ncache = strtoul(optarg, NULL, 10);
 			break;
 		case 'N':
 			httpd_config::max_connections = strtoul(optarg, NULL, 10);
