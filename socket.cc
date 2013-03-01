@@ -115,11 +115,13 @@ int bind_local(int sock, const string &host, const string &port, bool do_listen,
 	freeaddrinfo(ai);
 
 	if (do_listen) {
-		if (listen(sock, 10000) < 0) {
-			if (listen(sock, SOMAXCONN) < 0) {
-				error = "ns_socket::bind_local::listen: ";
-				error += strerror(errno);
-				return -1;
+		if (listen(sock, 100000) < 0) {
+			if (listen(sock, 10000) < 0) {
+				if (listen(sock, SOMAXCONN) < 0) {
+					error = "ns_socket::bind_local::listen: ";
+					error += strerror(errno);
+					return -1;
+				}
 			}
 		}
 	}

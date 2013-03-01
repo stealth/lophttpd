@@ -21,7 +21,7 @@ namespace httpd_config
 	string user = "wwwrun", logfile = "/var/log/lophttpd", log_provider = "file";
 	uid_t user_uid = 99, user_gid = 99;
 	string host = "0.0.0.0", port = "80";
-	int cores = -1, af = AF_INET;
+	int cores = 1, af = AF_INET;
 
 	// on multicore there is only one master
 	int master = 1;
@@ -29,6 +29,7 @@ namespace httpd_config
 	uint16_t mss = 0;
 	uint32_t max_connections = 10000;
 	uint32_t ncache = 10000;
+	int client_sched = 0;
 }
 
 

@@ -22,6 +22,7 @@ namespace httpd_config
 	extern uint16_t mss;
 	extern uint32_t max_connections;
 	extern uint32_t ncache;
+	extern int client_sched;
 }
 
 

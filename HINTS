@@ -28,18 +28,33 @@ in general:
   (modprobe tcp_weswood and tune /proc/sys/net/ipv4/tcp_*)
 
 - You can experiment with lophttpd's send-size scheduling algorithms by
-  enabling -DSTATIC_SEND_SIZE_COMPUTATION compile time switch. This will decrease
-  the chunk-size of sendfile() by 128 Bytes for each N-clients/MANY_RECEIVERS.
-  MANY_RECEIVERS can be tuned too at compile time (enum). The chunk-size will never
-  be less than 64 and never be larger than 4096.
-  By default, lophttpd will check the currents socket send-queue and will decrease
-  the chunk-size if its still filled from the last send.
-  However, if you have ~10k parallel connections and quite slow down-link,
-  -DSTATIC_SEND_SIZE_COMPUTATION might be helpful since smaller files are still
-  delivered smoothly.
-  You can always force a chunk-size via -S switch (other than 1024), which will not
-  be re-calculated by lophttpd, in case you found a value that perfectly fits into
-  your network.
+  passing "-s algo" switch. This allows to choose between different scheduling
+  strategies if a lot of clients are handled simulteanously:
+
+   o none (default)
+     Usually there is no need to change anything. If you have good uplink, you
+     can serve 25k or more clients on a single core on a commodity PC. Todays
+     CPU and NIC speed dont really limit the amount of clients anymore. However
+     if you experiance connection drops for really large amount of clients, you
+     can try the algorithms below. Keep in mind that most drops are not caused by
+     lophttpd or the OS, but by overloaded network hardware like switches or routers
+     which cannot handle the constant high-load.
+
+   o suspend
+     This will remove the client from the POLLOUT list for the time it still
+     has data inside the TCP send buffer from the last send operation
+
+   o minimize
+     This will decrease the chunksize of the next segment to a minimum, so that
+     the TCP send-queue fills slower. Only happens if there is still data
+     inside the TCP send buffer (as above).
+
+   o static (deprecated)
+     This computes the size of the next data segment with some formula which depends
+     on how many clients are actually handled. Does not depend on whether there is
+     still data in the TCP send-buffer (hence 'static'). Because of the dumb 'static'
+     computation, this does not really adjust itself and is for testing only.
+
 
 - The default number of maximum allowed parallel connections is set to 10,000 (per core).
   If you experience some DoS which tries to exceed that, you can always increase it via -N,

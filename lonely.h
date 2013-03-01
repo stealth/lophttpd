@@ -84,6 +84,13 @@ typedef enum {
 } http_request_t;
 
 
+typedef enum {
+	CLIENT_SCHED_NONE = 0,
+	CLIENT_SCHED_SUSPEND,
+	CLIENT_SCHED_MINIMIZE,
+	CLIENT_SCHED_STATIC
+} client_sched_t;
+
 
 template<typename T>
 class lonely {
@@ -93,7 +100,7 @@ protected:
 	T *peer;
 	T **fd2peer;
 	int peer_idx;
-	uint32_t n_clients;
+	uint32_t n_clients, n_suspended;
 	int af;
 	log_provider *logger;
 
@@ -114,7 +121,7 @@ protected:
 
 public:
 	lonely()
-	 : first_fd(0), max_fd(0), peer(NULL), fd2peer(NULL), peer_idx(-1), n_clients(0), logger(NULL),
+	 : first_fd(0), max_fd(0), peer(NULL), fd2peer(NULL), peer_idx(-1), n_clients(0), n_suspended(0), logger(NULL),
 	   cur_time(0), cur_usec(0), err(""), heavy_load(0), so_sndbuf(4096)
 	{
 	}
@@ -142,7 +149,7 @@ enum {
 
 
 enum {
-	MANY_RECEIVERS = 500,
+	MANY_RECEIVERS = 1000,
 	MIN_SEND_SIZE = 64,
 	DEFAULT_SEND_SIZE = 1024,
 	MAX_SEND_SIZE = 4096

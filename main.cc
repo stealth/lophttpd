@@ -64,7 +64,7 @@ void die(const char *s, bool please_die = 1)
 void help(const char *p)
 {
 	cerr<<"Usage: "<<p<<" [-6] [-R web-root] [-B html-base-tag] [-iH] [-I IP] [-u user]\n"
-	    <<"\t\t [-l logfile] [-p port] [-L provider] [-n nCores] [-S n]\n"
+	    <<"\t\t [-l logfile] [-p port] [-L provider] [-n nCores] [-S n] [-s scheduler]\n"
 	    <<"\t\t [-U upload] [-r] [-E] [-Q] [-N n] [-e n] [-K PEM-file] [-C PEM-file]\n\n"
 	    <<"\tcommonly used options:\n\n"
 	    <<"\t\t -R : web-root, default "<<httpd_config::root<<endl
@@ -72,7 +72,7 @@ void help(const char *p)
 	    <<"\t\t -I : IP(6) to bind to, default {INADDR_ANY}\n"
 	    <<"\t\t -H : use vhosts (requires vhost setup in web-root)\n"
 	    <<"\t\t -u : run as this user, default "<<httpd_config::user<<endl
-	    <<"\t\t -n : number of CPU cores to use, default all"<<endl
+	    <<"\t\t -n : number of CPU cores to use, default 1 ('0' for all)"<<endl
 	    <<"\t\t -p : port, default "<<httpd_config::port<<endl<<endl
 	    <<"\trarely used options:\n\n"
 	    <<"\t\t -K : use this keyfile (enables SSL)\n"
@@ -87,6 +87,7 @@ void help(const char *p)
 	    <<"\t\t -U : upload dir inside web-root, default disabled"<<endl
 	    <<"\t\t -E : do not close connection on invalid requests, default disabled"<<endl
 	    <<"\t\t -e : cache requests (at most n) that cause 404 errors, to save parsing next time seen"<<endl
+	    <<"\t\t -s : scheduling algo for more than "<<MANY_RECEIVERS<<" clients (default 'none')"<<endl
 	    <<"\t\t -Q : (implies -r) do not tell client the rand token (for write-only uploads)"<<endl
 	    <<"\t\t -r : add rand token to uploaded filenames (default off)"<<endl<<endl;
 	exit(errno);
@@ -134,7 +135,7 @@ int main(int argc, char **argv)
 		cerr<<"Continuing in UNSAFE mode!\n\n";
 	}
 
-	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQN:C:K:e:")) != -1) {
+	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQN:C:K:e:s:")) != -1) {
 		switch (c) {
 		case '6':
 			httpd_config::host = "::0";
@@ -200,6 +201,18 @@ int main(int argc, char **argv)
 			break;
 		case 'C':
 			httpd_config::cfile = optarg;
+			break;
+		case 's':
+			if (strcmp(optarg, "none") == 0)
+				httpd_config::client_sched = CLIENT_SCHED_NONE;
+			if (strcmp(optarg, "static") == 0)
+				httpd_config::client_sched = CLIENT_SCHED_STATIC;
+			else if (strcmp(optarg, "suspend") == 0)
+				httpd_config::client_sched = CLIENT_SCHED_SUSPEND;
+			else if (strcmp(optarg, "minimize") == 0)
+				httpd_config::client_sched = CLIENT_SCHED_MINIMIZE;
+			else
+				help(*argv);
 			break;
 		case 'h':
 		default:

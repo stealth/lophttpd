@@ -427,15 +427,13 @@ int lonely_http::loop()
 				continue;
 			}
 
-			if (pfds[i].revents == 0)
+			if (pfds[i].revents == 0 && peer->state() != STATE_DOWNLOADING_FULL)
 				continue;
 
 			if ((pfds[i].revents & (POLLERR|POLLHUP|POLLNVAL)) != 0) {
 				cleanup(i);
 				continue;
 			}
-
-			peer->alive_time = cur_time;
 
 			// All below states have an event pending, since we wont
 			// be here if revents would be 0
@@ -444,6 +442,7 @@ int lonely_http::loop()
 			if (peer->state() == STATE_ACCEPTING) {
 				pfds[i].revents = 0;
 				pfds[i].events = POLLIN|POLLOUT;
+				peer->alive_time = cur_time;
 
 				int afd = 0;
 				for (;n_clients < httpd_config::max_connections;) {
@@ -491,6 +490,7 @@ int lonely_http::loop()
 						max_fd = afd;
 					++n_clients;
 				}
+
 				// There is nothing more to do for the accept socket;
 				// just continue with the other sockets
 				continue;
@@ -522,12 +522,23 @@ int lonely_http::loop()
 			// download() may change state so we need a 2nd state-engine walk
 
 			switch (peer->state()) {
+			case STATE_DOWNLOADING_FULL:
+				if (!pfds[i].events && flavor::in_send_queue(i) == 0) {
+					peer->alive_time = cur_time;
+					pfds[i].events = POLLOUT;
+					peer->transition(STATE_DOWNLOADING);
+					--n_suspended;
+				} else
+					pfds[i].events = 0;
+				break;
 			case STATE_DOWNLOADING:
+				peer->alive_time = cur_time;
 				pfds[i].events = POLLOUT;
 				break;
 			case STATE_UPLOADING:
 			case STATE_CONNECTED:
 			case STATE_HANDSHAKING:
+				peer->alive_time = cur_time;
 				pfds[i].events = POLLIN;
 				break;
 			default:
@@ -625,34 +636,41 @@ int lonely_http::download()
 			return -1;
 	}
 
-
 	if (!forced_send_size)
 		n_send = DEFAULT_SEND_SIZE;
 
-#ifndef STATIC_SEND_SIZE_COMPUTATION
-	if (!forced_send_size && n_clients > MANY_RECEIVERS) {
-		int not_sent = flavor::in_send_queue(peer->peer_fd);
+	if (!forced_send_size && peer->copied > 0 && n_clients > MANY_RECEIVERS) {
+		if (httpd_config::client_sched == CLIENT_SCHED_NONE) {
+				;
+		} else if (httpd_config::client_sched == CLIENT_SCHED_MINIMIZE) {
+			int not_sent = flavor::in_send_queue(peer->peer_fd);
 
-		// send queue starts to fill?
-		if (not_sent == 0)
-			n_send = DEFAULT_SEND_SIZE;
-		else
-			n_send = min_send;
+			peer->in_queue = not_sent;
 
-		if (n_send > max_send)
-			n_send = max_send;
-		if (n_send < min_send)
-			n_send = min_send;
+			if (not_sent > max_send)
+				n_send = min_send;
 
-		peer->in_queue = not_sent;
+			if (n_send > max_send)
+				n_send = max_send;
+			if (n_send < min_send)
+				n_send = min_send;
+		} else if (httpd_config::client_sched == CLIENT_SCHED_SUSPEND &&
+		           n_clients - n_suspended > MANY_RECEIVERS) {
+			int not_sent = flavor::in_send_queue(peer->peer_fd);
+
+			peer->in_queue = not_sent;
+
+			if (not_sent > max_send) {
+				++n_suspended;
+				peer->transition(STATE_DOWNLOADING_FULL);
+				return 0;
+			}
+		} else if (httpd_config::client_sched == CLIENT_SCHED_STATIC) {
+			n_send = DEFAULT_SEND_SIZE - 128*(n_clients/MANY_RECEIVERS);
+			if (n_send < min_send || n_send > max_send)
+				n_send = min_send;
+		}
 	}
-#else
-	if (!forced_send_size && n_clients > MANY_RECEIVERS) {
-		n_send = DEFAULT_SEND_SIZE - 128*(n_clients/MANY_RECEIVERS);
-		if (n_send < min_send || n_send > max_send)
-			n_send = min_send;
-	}
-#endif
 
 	size_t n = peer->left;
 	if (n > n_send)
@@ -771,7 +789,7 @@ int lonely_http::TRACE()
 
 int lonely_http::upload()
 {
-	char buf[n_send];
+	char buf[max_send];
 	ssize_t n = 0;
 
 	// upload file fd is closed via cleanup() in STATE_UPLOADING
@@ -1027,7 +1045,7 @@ int lonely_http::GETPOST()
 	log(logstr);
 
 	if (de_escape_path() < 0)
-		return send_error(HTTP_ERROR_400);
+		return send_error(HTTP_ERROR_404);
 
 	int r = 0;
 	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode) || flavor::servable_device(cur_stat))) {
