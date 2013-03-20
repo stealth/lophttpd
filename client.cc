@@ -268,7 +268,7 @@ int http_client::ssl_accept(SSL_CTX *ssl_ctx)
 		ssl_enabled = 1;
 		keep_alive = 1;
 		ssl_time = alive_time;
-		return 0;
+		return 1;
 
 	// no complete handshake yet? Try later
 	case SSL_ERROR_WANT_READ:

@@ -1,5 +1,5 @@
 /* webstress webserver download bandwidth tesing tool
- * (C) 2011 Sebastian Krahmer
+ * (C) 2011-2013 Sebastian Krahmer
  */
 #include <iostream>
 #include <map>
@@ -17,6 +17,9 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <openssl/evp.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
 
 
 using namespace std;
@@ -25,6 +28,8 @@ using namespace std;
 enum {
 	HTTP_STATE_CONNECTING = 0,
 	HTTP_STATE_CONNECTED,
+	HTTP_STATE_HANDSHAKING,
+	HTTP_STATE_HANDSHAKED,
 	HTTP_STATE_TRANSFERING
 };
 
@@ -32,7 +37,7 @@ enum {
 class webstress {
 
 	string host, port, path, err;
-	bool sequential;
+	bool sequential, ssl;
 	int max_cl, peers, ever, ests, success, hdr_fail, write_fail, read_fail, to_fail, hup_fail, max_fd;
 	time_t now;
 
@@ -42,18 +47,27 @@ class webstress {
 		size_t obtained, content_length;
 		int state;
 		time_t time, start_time;
+		SSL *ssl;
 	};
 
 	map<int, client *> clients;
 
 	static const int TIMEOUT = 60;
 
+	const SSL_METHOD *ssl_method;
+	SSL_CTX *ssl_ctx;
+
 public:
 	webstress(const string &h, const string &p, const string &f, int max, bool seq = 0)
-		: host(h), port(p), path(f), err(""), sequential(seq), max_cl(max),
+		: host(h), port(p), path(f), err(""), sequential(seq), ssl(0), max_cl(max),
 		  peers(0), ever(0), ests(0), success(0), hdr_fail(0), write_fail(0), read_fail(0),
 	          to_fail(0), hup_fail(0), max_fd(0), pfds(NULL)
 	{
+		if (p == "443")
+			ssl = 1;
+
+		ssl_method = NULL;
+		ssl_ctx = NULL;
 	}
 
 	~webstress()
@@ -67,6 +81,9 @@ public:
 		max_cl = n;
 	}
 
+	int ssl_init();
+
+	int recv(int, char *, size_t, int);
 
 	int loop();
 
@@ -100,6 +117,46 @@ int writen(int fd, const void *buf, size_t len)
 }
 
 
+int webstress::recv(int fd, char *buf, size_t blen, int flags)
+{
+	int r = 0;
+
+	if (ssl) {
+		 if (!clients[fd]->ssl)
+			return -1;
+
+		if (flags == MSG_PEEK) {
+			r = SSL_peek(clients[fd]->ssl, buf, blen);
+			switch (SSL_get_error(clients[fd]->ssl, r)) {
+			case SSL_ERROR_NONE:
+				break;
+			case SSL_ERROR_WANT_WRITE:
+			case SSL_ERROR_WANT_READ:
+				r = 0;
+				break;
+			default:
+				r = -1;
+			}
+		} else {
+			r = SSL_read(clients[fd]->ssl, buf, blen);
+			switch (SSL_get_error(clients[fd]->ssl, r)) {
+			case SSL_ERROR_NONE:
+				break;
+			case SSL_ERROR_WANT_READ:
+				r = 0;
+				break;
+			default:
+				r = -1;
+			}
+		}
+
+		return r;
+	}
+
+	return recv(fd, buf, blen, flags);
+}
+
+
 int webstress::cleanup(int fd)
 {
 	if (fd < 0)
@@ -112,12 +169,18 @@ int webstress::cleanup(int fd)
 	if (clients[fd]->state > HTTP_STATE_CONNECTING)
 		--ests;
 
+	if (ssl) {
+		if (clients[fd]->ssl)
+			SSL_free(clients[fd]->ssl);
+	}
+
 	delete clients[fd];
 	clients[fd] = NULL;
 	--peers;
 
 	if (fd == max_fd)
 		--max_fd;
+
 	return 0;
 }
 
@@ -138,6 +201,11 @@ void webstress::print_stat(int fd)
 	case HTTP_STATE_TRANSFERING:
 		s = 'T';
 		break;
+	case HTTP_STATE_HANDSHAKING:
+		s = 'h';
+		break;
+	case HTTP_STATE_HANDSHAKED:
+		s = 'H';
 	}
 
 	printf("(%c)[#=%08u][#S=%05u][#P=%05u][#EST=%05u][rf=%05u][hdrf=%05u][wf=%05u][tf=%05u][hf=%05u][cnt=%08u][%s][%f MB/s]\n",
@@ -157,6 +225,29 @@ void webstress::calc_max_fd()
 	}
 }
 
+
+int webstress::ssl_init()
+{
+	SSL_library_init();
+	SSL_load_error_strings();
+	OpenSSL_add_all_algorithms();
+	OpenSSL_add_all_digests();
+
+	if ((ssl_method = TLSv1_client_method()) == NULL) {
+		fprintf(stderr, "ERR: TLSv1_client_method: %s\n", ERR_error_string(ERR_get_error(), NULL));
+		return -1;
+	}
+
+	if ((ssl_ctx = SSL_CTX_new(ssl_method)) == NULL) {
+		fprintf(stderr, "ERR: SSL_CTX_new: %s\n", ERR_error_string(ERR_get_error(), NULL));
+		return -1;
+	}
+	SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
+	SSL_CTX_set_options(ssl_ctx, SSL_OP_ALL);
+	return 0;
+}
+
+
 int webstress::loop()
 {
 	struct rlimit rl;
@@ -175,6 +266,11 @@ int webstress::loop()
 			err += strerror(errno);
 			return -1;
 		}
+	}
+
+	if (ssl) {
+		if (ssl_init() < 0)
+			return -1;
 	}
 
 
@@ -272,27 +368,77 @@ int webstress::loop()
 					continue;
 				}
 				++ests;
-				clients[i]->state = HTTP_STATE_CONNECTED;
 
-				if (writen(i, GET, GET_len) <= 0) {
-					++write_fail;
-					print_stat(i);
-					cleanup(i);
-					continue;
+				if (ssl) {
+					clients[i]->state = HTTP_STATE_HANDSHAKING;
+					clients[i]->ssl = SSL_new(ssl_ctx);
+					SSL_set_fd(clients[i]->ssl, i);
+					pfds[i].events = POLLOUT;
+				} else {
+					clients[i]->state = HTTP_STATE_CONNECTED;
+
+					if (writen(i, GET, GET_len) <= 0) {
+						++write_fail;
+						print_stat(i);
+						cleanup(i);
+						continue;
+					}
+
+					pfds[i].events = POLLIN;
 				}
 
 				pfds[i].revents = 0;
-				pfds[i].events = POLLIN;
 				clients[i]->start_time = clients[i]->time = now;
+
+			} else if (clients[i]->state == HTTP_STATE_HANDSHAKING) {
+				r = SSL_connect(clients[i]->ssl);
+				switch (SSL_get_error(clients[i]->ssl, r)) {
+				case SSL_ERROR_NONE:
+					clients[i]->state = HTTP_STATE_HANDSHAKED;
+					pfds[i].events = POLLOUT;
+					clients[i]->time = now;
+					break;
+				case SSL_ERROR_WANT_READ:
+					pfds[i].events = POLLIN;
+					break;
+				default:
+					print_stat(i);
+					cleanup(i);
+				}
+				pfds[i].revents = 0;
+
+			} else if (clients[i]->state == HTTP_STATE_HANDSHAKED) {
+				r = SSL_write(clients[i]->ssl, GET, GET_len);
+				switch (SSL_get_error(clients[i]->ssl, r)) {
+				case SSL_ERROR_NONE:
+					clients[i]->state = HTTP_STATE_CONNECTED;
+					pfds[i].events = POLLIN;
+					clients[i]->time = now;
+					break;
+				case SSL_ERROR_WANT_WRITE:
+					pfds[i].events = POLLOUT;
+					break;
+				default:
+					print_stat(i);
+					cleanup(i);
+				}
+				pfds[i].revents = 0;
+
 			// just read header and extracet Content-Length if found
 			} else if (clients[i]->state == HTTP_STATE_CONNECTED) {
 				memset(buf, 0, sizeof(buf));
-				if ((r = recv(i, buf, sizeof(buf) - 1, MSG_PEEK)) <= 0) {
+				r = this->recv(i, buf, sizeof(buf) - 1, MSG_PEEK);
+
+				if (ssl && r == 0)
+					continue;
+
+				if (r <= 0) {
 					++read_fail;
 					print_stat(i);
 					cleanup(i);
 					continue;
 				}
+
 				char *ptr = NULL;
 				if ((ptr = strstr(buf, "\r\n\r\n")) == NULL) {
 					if (now - clients[i]->time > TIMEOUT) {
@@ -302,7 +448,7 @@ int webstress::loop()
 					}
 					continue;
 				}
-				if (read(i, buf, ptr - buf + 4) <= 0) {
+				if (this->recv(i, buf, ptr - buf + 4, 0) <= 0) {
 					++hdr_fail;
 					cleanup(i);
 					continue;
@@ -332,11 +478,17 @@ int webstress::loop()
 			// read content
 			} else if (clients[i]->state == HTTP_STATE_TRANSFERING) {
 				errno = 0;
-				if ((r = read(i, buf, sizeof(buf))) < 0) {
+				r = this->recv(i, buf, sizeof(buf), 0);
+
+				if (ssl && r == 0)
+					continue;
+
+				if (r <= 0) {
 					++read_fail;
 					cleanup(i);
 					continue;
 				}
+
 				clients[i]->obtained += r;
 				if (clients[i]->obtained == clients[i]->content_length || r == 0) {
 					if (clients[i]->obtained == clients[i]->content_length)

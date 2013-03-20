@@ -366,7 +366,7 @@ int lonely_http::setup_ssl(const string &cpath, const string &kpath)
 
 int lonely_http::loop()
 {
-	int i = 0;
+	int i = 0, r = 0;
 	struct sockaddr_in sin;
 	struct sockaddr_in6 sin6;
 	socklen_t slen = sizeof(sin);
@@ -496,26 +496,30 @@ int lonely_http::loop()
 				continue;
 #ifdef USE_SSL
 			} else if (peer->state() == STATE_HANDSHAKING) {
-				if (peer->ssl_accept(ssl_ctx) < 0) {
+				if ((r = peer->ssl_accept(ssl_ctx)) < 0) {
 					cleanup(i);
 					continue;
-				}
+				} else if (r > 0)
+					peer->alive_time = cur_time;
 #endif
 			} else if (peer->state() == STATE_CONNECTED) {
-				if (handle_request() < 0) {
+				if ((r = handle_request()) < 0) {
 					cleanup(i);
 					continue;
-				}
+				} else if (r > 0)
+					peer->alive_time = cur_time;
 			} else if (peer->state() == STATE_DOWNLOADING) {
-				if (download() < 0) {
+				if ((r = download()) < 0) {
 					cleanup(i);
 					continue;
-				}
+				} else if (r > 0)
+					peer->alive_time = cur_time;
 			} else if (peer->state() == STATE_UPLOADING) {
-				if (upload() < 0) {
+				if ((r = upload()) < 0) {
 					cleanup(i);
 					continue;
-				}
+				} else if (r > 0)
+					peer->alive_time = cur_time;
 			}
 
 			// do not glue together the above and below if()'s because
@@ -532,13 +536,11 @@ int lonely_http::loop()
 					pfds[i].events = 0;
 				break;
 			case STATE_DOWNLOADING:
-				peer->alive_time = cur_time;
 				pfds[i].events = POLLOUT;
 				break;
 			case STATE_UPLOADING:
 			case STATE_CONNECTED:
 			case STATE_HANDSHAKING:
-				peer->alive_time = cur_time;
 				pfds[i].events = POLLIN;
 				break;
 			default:
@@ -696,7 +698,7 @@ int lonely_http::download()
 		peer->transition(STATE_DOWNLOADING);
 	}
 
-	return 0;
+	return 1;
 }
 
 
@@ -749,7 +751,7 @@ int lonely_http::HEAD()
 
 	if (peer->send(head.c_str(), head.size()) != (int)head.size())
 		return -1;
-	return 0;
+	return 1;
 }
 
 
@@ -762,7 +764,7 @@ int lonely_http::OPTIONS()
 	log("OPTIONS\n");
 	if (peer->send(reply.c_str(), reply.size()) != (int)reply.size())
 		return -1;
-	return 0;
+	return 1;
 }
 
 
@@ -817,7 +819,7 @@ int lonely_http::upload()
 		peer->keep_alive = 0;
 	}
 
-	return 0;
+	return 1;
 }
 
 
@@ -851,7 +853,7 @@ int lonely_http::PUT()
 
 	peer->file_fd = fd;
 	peer->transition(STATE_UPLOADING);
-	return 0;
+	return 1;
 }
 
 
@@ -1047,7 +1049,7 @@ int lonely_http::GETPOST()
 	if (de_escape_path() < 0)
 		return send_error(HTTP_ERROR_404);
 
-	int r = 0;
+	int r = 0, rr = 0;
 	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode) || flavor::servable_device(cur_stat))) {
 		if (cur_end_range == 0)
 			cur_end_range = cur_stat.st_size;
@@ -1069,15 +1071,13 @@ int lonely_http::GETPOST()
 		if (peer->ftype == FILE_PROC)
 			peer->left = 1024;
 
-		if (download() < 0)
-			return -1;
+		rr = download();
 	} else if (r == 0 && S_ISDIR(cur_stat.st_mode)) {
 		// No Range: requests for directories
 		if (cur_range_requested)
 			return send_error(HTTP_ERROR_416);
 		if (misc::dir2index.count(peer->path) > 0) {
-			if (send_genindex() < 0)
-				return -1;
+			rr = send_genindex();
 		} else {
 			// No generated index. Maybe index.html itself?
 			peer->path += "/index.html";
@@ -1085,8 +1085,7 @@ int lonely_http::GETPOST()
 				peer->offset = 0;
 				peer->copied = 0;
 				peer->left = cur_stat.st_size;
-				if (download() < 0)
-					return -1;
+				rr = download();
 			} else
 				return send_error(HTTP_ERROR_404);
 		}
@@ -1094,7 +1093,7 @@ int lonely_http::GETPOST()
 		return send_error(HTTP_ERROR_404);
 	}
 
-	return 0;
+	return rr;
 }
 
 
