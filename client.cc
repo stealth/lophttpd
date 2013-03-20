@@ -248,6 +248,25 @@ ssize_t http_client::peek_req()
 
 
 #ifdef USE_SSL
+
+int http_client::new_session(SSL *ssl, SSL_SESSION *sess)
+{
+	return 1;
+}
+
+
+void http_client::remove_session(SSL_CTX *ctx, SSL_SESSION *sess)
+{
+	return;
+}
+
+
+SSL_SESSION *http_client::get_session(SSL *ssl, unsigned char *id, int len, int *ref)
+{
+	return NULL;
+}
+
+
 int http_client::ssl_accept(SSL_CTX *ssl_ctx)
 {
 	int r = 0;

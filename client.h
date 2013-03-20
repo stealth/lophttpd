@@ -129,7 +129,15 @@ public:
 	bool is_ssl() { return ssl_enabled; };
 
 #ifdef USE_SSL
+
 	int ssl_accept(SSL_CTX *);
+
+	static int new_session(SSL *, SSL_SESSION *);
+
+	static void remove_session(SSL_CTX *, SSL_SESSION *);
+
+	static SSL_SESSION *get_session(SSL *, unsigned char *, int, int *);
+
 #endif
 
 };

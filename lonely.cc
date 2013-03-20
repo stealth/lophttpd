@@ -357,6 +357,19 @@ int lonely_http::setup_ssl(const string &cpath, const string &kpath)
 		err += ERR_error_string(ERR_get_error(), NULL);
 		return -1;
 	}
+
+	if (SSL_CTX_set_session_id_context(ssl_ctx, (const unsigned char *)"lophttpd", 8) != 1) {
+		err = "lonely_http::setup_ssl::SSL_CTX_set_session_id_context:";
+		err += ERR_error_string(ERR_get_error(), NULL);
+		return -1;
+	}
+
+	SSL_CTX_set_session_cache_mode(ssl_ctx, SSL_SESS_CACHE_SERVER);
+
+	SSL_CTX_sess_set_new_cb(ssl_ctx, http_client::new_session);
+	SSL_CTX_sess_set_remove_cb(ssl_ctx, http_client::remove_session);
+	SSL_CTX_sess_set_get_cb(ssl_ctx, http_client::get_session);
+
 #endif
 
 	return 0;
@@ -619,7 +632,8 @@ int lonely_http::download()
 {
 	int r = 0;
 
-	if (peer->file_fd < 0) {
+	// First called on request?
+	if (peer->state() == STATE_CONNECTED) {
 		// assigns peer->file_fd
 		if (open() < 0) {
 			// callers of download() must not send_error() themself on -1,
@@ -692,8 +706,8 @@ int lonely_http::download()
 		return -1;
 	} else if (peer->left == 0) {
 		//close(pf.fd); Do not close, due to caching
+		peer->file_fd = -1;
 		peer->transition(STATE_CONNECTED);
-		peer->header_time = 0;
 	} else {
 		peer->transition(STATE_DOWNLOADING);
 	}
@@ -1133,9 +1147,9 @@ int lonely_http::send_error(http_error_code_t e)
 		http_header += "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 		peer->keep_alive = 0;
 	} else
-		http_header += "\r\nContent-Length: 0\r\n\rn";
+		http_header += "\r\nContent-Length: 0\r\n\r\n";
 
-	if (peer->send(http_header.c_str(), http_header.size()) <= 0) {
+	if (peer->send(http_header.c_str(), http_header.size()) !=  (int)http_header.size()) {
 		shutdown(peer_idx);
 		return -1;
 	}
@@ -1175,11 +1189,16 @@ int lonely_http::handle_request()
 	// incomplete header?
 	if ((ptr = strstr(req_buf, "\r\n\r\n")) == NULL) {
 		if (cur_time - peer->header_time > TIMEOUT_HEADER) {
-			return send_error(HTTP_ERROR_408);
+			// even on no-error-kill, shutdown on timeout
+			send_error(HTTP_ERROR_408);
+			peer->keep_alive = 0;
+			return -1;
 		}
 		peer->keep_alive = 1;
 		return 0;
 	}
+
+	peer->header_time = 0;
 
 	// should not happen, as req_idx is increased by one and checked for \r\n\r\n each
 	// time
@@ -1199,7 +1218,7 @@ int lonely_http::handle_request()
 	end_ptr = req_buf + peer->req_idx + n;
 	peer->req_idx = 0;
 
-	peer->keep_alive = 0;
+	peer->keep_alive = 1;
 	int (lonely_http::*action)() = NULL;
 
 	cur_request = HTTP_REQUEST_NONE;
@@ -1328,10 +1347,13 @@ int lonely_http::handle_request()
 		if (ptr2 >= last_byte)
 			return send_error(HTTP_ERROR_400);
 
-		if (strncasecmp(ptr2, "keep-alive", 10) == 0) {
+		if (strncasecmp(ptr2, "keep-alive", 10) == 0)
 			peer->keep_alive = 1;
-		}
-	}
+		else
+			peer->keep_alive = 0;
+	} else
+			peer->keep_alive = 0;
+
 	if (vhosts && (ptr2 = strcasestr(ptr, "Host:"))) {
 		ptr2 += 5;
 		for (; ptr2 < last_byte; ++ptr2) {
