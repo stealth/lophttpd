@@ -153,7 +153,7 @@ int webstress::recv(int fd, char *buf, size_t blen, int flags)
 		return r;
 	}
 
-	return recv(fd, buf, blen, flags);
+	return ::recv(fd, buf, blen, flags);
 }
 
 
@@ -424,7 +424,7 @@ int webstress::loop()
 				}
 				pfds[i].revents = 0;
 
-			// just read header and extracet Content-Length if found
+			// just read header and extract Content-Length if found
 			} else if (clients[i]->state == HTTP_STATE_CONNECTED) {
 				memset(buf, 0, sizeof(buf));
 				r = this->recv(i, buf, sizeof(buf) - 1, MSG_PEEK);

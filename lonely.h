@@ -216,7 +216,7 @@ private:
 
 	int send_http_header();
 
-	int send_error(http_error_code_t);
+	int send_error(http_error_code_t, int);
 
 	int stat();
 

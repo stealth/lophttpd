@@ -225,10 +225,8 @@ void lonely<state_engine>::shutdown(int fd)
 	if (fd2peer[fd]->state() == STATE_CLOSING || fd2peer[fd]->state() == STATE_NONE)
 		return;
 
-	if (fd2peer[fd]->state() == STATE_UPLOADING) {
+	if (fd2peer[fd]->state() == STATE_UPLOADING)
 		close(fd2peer[fd]->file_fd);
-		fd2peer[fd]->file_fd = -1;
-	}
 
 	::shutdown(fd, SHUT_RDWR);
 
@@ -639,10 +637,7 @@ int lonely_http::download()
 			// callers of download() must not send_error() themself on -1,
 			// as they cannot know whether a failure appeared before or after
 			// send_header() call. Thus download() sends its erros themself.
-			send_error(HTTP_ERROR_500);
-			err = "lonely_http::download::open:";
-			err += strerror(errno);
-			return -1;
+			return send_error(HTTP_ERROR_500, -1);
 		}
 	}
 
@@ -730,7 +725,7 @@ int lonely_http::HEAD()
 	log(logstr);
 
 	if (de_escape_path() < 0)
-		return send_error(HTTP_ERROR_400);
+		return send_error(HTTP_ERROR_400, -1);
 
 	if (stat() < 0)
 		head = "HTTP/1.1 404 Not Found\r\nDate: ";
@@ -785,21 +780,21 @@ int lonely_http::OPTIONS()
 int lonely_http::DELETE()
 {
 	log("DELETE\n");
-	return send_error(HTTP_ERROR_405);
+	return send_error(HTTP_ERROR_405, -1);
 }
 
 
 int lonely_http::CONNECT()
 {
 	log("CONNECT\n");
-	return send_error(HTTP_ERROR_405);
+	return send_error(HTTP_ERROR_405, -1);
 }
 
 
 int lonely_http::TRACE()
 {
 	log("TRACE\n");
-	return send_error(HTTP_ERROR_501);
+	return send_error(HTTP_ERROR_501, -1);
 }
 
 
@@ -810,10 +805,10 @@ int lonely_http::upload()
 
 	// upload file fd is closed via cleanup() in STATE_UPLOADING
 	if ((n = peer->recv(buf, sizeof(buf))) <= 0)
-		return send_error(HTTP_ERROR_400);
+		return send_error(HTTP_ERROR_400, -1);
 
 	if (write(peer->file_fd, buf, n) != n)
-		return send_error(HTTP_ERROR_500);
+		return send_error(HTTP_ERROR_500, -1);
 
 	peer->copied += n;
 
@@ -829,6 +824,7 @@ int lonely_http::upload()
 		peer->send(html.c_str(), html.size());
 
 		close(peer->file_fd);
+		peer->file_fd = -1;
 		peer->transition(STATE_CONNECTED);
 		peer->keep_alive = 0;
 	}
@@ -847,7 +843,7 @@ int lonely_http::PUT()
 	log(logstr);
 
 	if (p.find("..") != string::npos)
-		return send_error(HTTP_ERROR_400);
+		return send_error(HTTP_ERROR_400, -1);
 
 	int fd = 0;
 	peer->offset = 0;
@@ -863,7 +859,7 @@ int lonely_http::PUT()
 	}
 
 	if ((fd = ::open(p.c_str(), O_WRONLY|O_CREAT|O_EXCL, 0600)) < 0)
-		return send_error(HTTP_ERROR_400);
+		return send_error(HTTP_ERROR_400, -1);
 
 	peer->file_fd = fd;
 	peer->transition(STATE_UPLOADING);
@@ -1061,7 +1057,7 @@ int lonely_http::GETPOST()
 	log(logstr);
 
 	if (de_escape_path() < 0)
-		return send_error(HTTP_ERROR_404);
+		return send_error(HTTP_ERROR_404, -1);
 
 	int r = 0, rr = 0;
 	if ((r = stat()) == 0 && (S_ISREG(cur_stat.st_mode) || flavor::servable_device(cur_stat))) {
@@ -1073,7 +1069,7 @@ int lonely_http::GETPOST()
 			    cur_start_range >= cur_stat.st_size ||
 			    cur_end_range > (size_t)cur_stat.st_size ||
 			    (size_t)cur_start_range >= cur_end_range) {
-				return send_error(HTTP_ERROR_416);
+				return send_error(HTTP_ERROR_416, -1);
 			}
 		}
 
@@ -1089,7 +1085,7 @@ int lonely_http::GETPOST()
 	} else if (r == 0 && S_ISDIR(cur_stat.st_mode)) {
 		// No Range: requests for directories
 		if (cur_range_requested)
-			return send_error(HTTP_ERROR_416);
+			return send_error(HTTP_ERROR_416, -1);
 		if (misc::dir2index.count(peer->path) > 0) {
 			rr = send_genindex();
 		} else {
@@ -1101,10 +1097,10 @@ int lonely_http::GETPOST()
 				peer->left = cur_stat.st_size;
 				rr = download();
 			} else
-				return send_error(HTTP_ERROR_404);
+				return send_error(HTTP_ERROR_404, 0);
 		}
 	} else {
-		return send_error(HTTP_ERROR_404);
+		return send_error(HTTP_ERROR_404, 0);
 	}
 
 	return rr;
@@ -1117,7 +1113,7 @@ int lonely_http::GET()
 }
 
 
-int lonely_http::send_error(http_error_code_t e)
+int lonely_http::send_error(http_error_code_t e, int r)
 {
 	// If configured so, build up a cache of HTTP requests (as seen per
 	// first line, e.g. "GET /foo") that caused errors in past. Inside
@@ -1149,15 +1145,15 @@ int lonely_http::send_error(http_error_code_t e)
 	} else
 		http_header += "\r\nContent-Length: 0\r\n\r\n";
 
-	if (peer->send(http_header.c_str(), http_header.size()) !=  (int)http_header.size()) {
+	if (peer->send(http_header.c_str(), http_header.size()) != (int)http_header.size()) {
 		shutdown(peer_idx);
 		return -1;
 	}
 
-	if (!httpd_config::no_error_kill)
+	if (r < 0 || !httpd_config::no_error_kill)
 		shutdown(peer_idx);
 
-	return 0;
+	return r;
 }
 
 
@@ -1190,9 +1186,7 @@ int lonely_http::handle_request()
 	if ((ptr = strstr(req_buf, "\r\n\r\n")) == NULL) {
 		if (cur_time - peer->header_time > TIMEOUT_HEADER) {
 			// even on no-error-kill, shutdown on timeout
-			send_error(HTTP_ERROR_408);
-			peer->keep_alive = 0;
-			return -1;
+			return send_error(HTTP_ERROR_408, -1);
 		}
 		peer->keep_alive = 1;
 		return 0;
@@ -1203,7 +1197,7 @@ int lonely_http::handle_request()
 	// should not happen, as req_idx is increased by one and checked for \r\n\r\n each
 	// time
 	if (peer->req_idx > (size_t)(ptr - req_buf + 4))
-		return send_error(HTTP_ERROR_400);
+		return send_error(HTTP_ERROR_400, -1);
 
 	n = 0;
 	// read exactly the header from the queue, (if not already) including \r\n\r\n
@@ -1230,7 +1224,7 @@ int lonely_http::handle_request()
 			peer->first_line = string(req_buf, ptr - req_buf);
 		}
 		if (err_cache.count(peer->first_line) > 0) {
-			return send_error(err_cache[peer->first_line]);
+			return send_error(err_cache[peer->first_line], 0);
 		}
 	}
 
@@ -1244,7 +1238,7 @@ int lonely_http::handle_request()
 				break;
 		}
 		if (ptr >= end_ptr)
-			return send_error(HTTP_ERROR_400);
+			return send_error(HTTP_ERROR_400, -1);
 		cl = strtoul(ptr, NULL, 10);
 	}
 
@@ -1260,13 +1254,11 @@ int lonely_http::handle_request()
 	// For POST requests, we also require a Content-Length that matches.
 	} else if (strncmp(req_buf, "POST", 4) == 0) {
 		if (cl == 0 || cl >= sizeof(body))
-			return send_error(HTTP_ERROR_414);
+			return send_error(HTTP_ERROR_414, -1);
 		// The body should be right here, we dont mind if stupid senders
 		// send them separately
 		if ((size_t)peer->recv(body, sizeof(body)) != cl)
-			return send_error(HTTP_ERROR_400);
-		else
-			return send_error(HTTP_ERROR_411);
+			return send_error(HTTP_ERROR_400, -1);
 		action = &lonely_http::POST;
 		cur_request = HTTP_REQUEST_POST;
 		ptr = req_buf + 4;
@@ -1298,7 +1290,7 @@ int lonely_http::handle_request()
 		cur_request = HTTP_REQUEST_CONNECT;
 		ptr = req_buf + 7;
 	} else {
-		return send_error(HTTP_ERROR_400);
+		return send_error(HTTP_ERROR_400, 0);
 	}
 
 	for (; ptr < end_ptr; ++ptr) {
@@ -1307,12 +1299,12 @@ int lonely_http::handle_request()
 	}
 
 	if (ptr >= end_ptr)
-		return send_error(HTTP_ERROR_400);
+		return send_error(HTTP_ERROR_400, -1);
 
 	end_ptr = ptr + strcspn(ptr + 1, "? \t\r");
 
 	if (end_ptr >= last_byte)
-		return send_error(HTTP_ERROR_400);
+		return send_error(HTTP_ERROR_400, -1);
 	end_ptr[1] = 0;
 
 	// remove trailing / if not just a single slash, to avoid
@@ -1322,7 +1314,7 @@ int lonely_http::handle_request()
 
 	if (cur_request == HTTP_REQUEST_PUT) {
 		if (httpd_config::upload.size() == 0)
-			return send_error(HTTP_ERROR_400);
+			return send_error(HTTP_ERROR_400, 0);
 
 		if (expecting)
 			peer->send("HTTP/1.1 100 Continue\r\n\r\n", 25);
@@ -1336,7 +1328,7 @@ int lonely_http::handle_request()
 
 	ptr = end_ptr + 2; // rest of header
 	if (ptr > last_byte)
-		return send_error(HTTP_ERROR_400);
+		return send_error(HTTP_ERROR_400, -1);
 
 	if ((ptr2 = strcasestr(ptr, "Connection:")) && peer_idx < 30000) {
 		ptr2 += 11;
@@ -1345,7 +1337,7 @@ int lonely_http::handle_request()
 				break;
 		}
 		if (ptr2 >= last_byte)
-			return send_error(HTTP_ERROR_400);
+			return send_error(HTTP_ERROR_400, -1);
 
 		if (strncasecmp(ptr2, "keep-alive", 10) == 0)
 			peer->keep_alive = 1;
@@ -1362,7 +1354,7 @@ int lonely_http::handle_request()
 		}
 
 		if (ptr2 >= last_byte)
-			return send_error(HTTP_ERROR_400);
+			return send_error(HTTP_ERROR_400, -1);
 
 		if ((end_ptr = strstr(ptr2, "\r\n"))) {
 
@@ -1370,7 +1362,7 @@ int lonely_http::handle_request()
 
 			// makes no sense
 			if (string(ptr2) == "icons" || strstr(ptr2, ".."))
-				return send_error(HTTP_ERROR_404);
+				return send_error(HTTP_ERROR_404, 0);
 
 			// If already requesting vhost files (genindex), then, do not prepend
 			// vhost path again
@@ -1382,14 +1374,14 @@ int lonely_http::handle_request()
 					peer->path += tmps;
 			}
 		} else {
-			return send_error(HTTP_ERROR_400);
+			return send_error(HTTP_ERROR_400, -1);
 		}
 	}
 
 	// Range: bytes 0-7350
 	if ((ptr2 = strcasestr(ptr, "Range:")) != NULL) {
 		if (cur_request != HTTP_REQUEST_GET)
-			return send_error(HTTP_ERROR_416);
+			return send_error(HTTP_ERROR_416, -1);
 
 		ptr2 += 6;
 		for (; ptr2 < last_byte; ++ptr2) {
@@ -1397,23 +1389,23 @@ int lonely_http::handle_request()
 				break;
 		}
 		if (ptr2 >= last_byte)
-			return send_error(HTTP_ERROR_400);
+			return send_error(HTTP_ERROR_400, -1);
 		if (strncmp(ptr2, "bytes=", 6) != 0)
-			return send_error(HTTP_ERROR_416);
+			return send_error(HTTP_ERROR_416, -1);
 		ptr2 += 6;
 		if (ptr2 >= last_byte)
-			return send_error(HTTP_ERROR_400);
+			return send_error(HTTP_ERROR_400, -1);
 		end_ptr = NULL;
 		cur_start_range = strtoul(ptr2, &end_ptr, 10);
 		if (!end_ptr || end_ptr == ptr2 || end_ptr + 1 >= last_byte)
-			return send_error(HTTP_ERROR_400);
+			return send_error(HTTP_ERROR_400, -1);
 		char *end_ptr2 = NULL;
 		cur_end_range = strtoul(end_ptr + 1, &end_ptr2, 10);
 		if (!end_ptr2 || end_ptr2 >= last_byte)
-			return send_error(HTTP_ERROR_400);
+			return send_error(HTTP_ERROR_400, -1);
 		// dont accept further ranges, one is enough
 		if (*end_ptr2 != '\r')
-			return send_error(HTTP_ERROR_416);
+			return send_error(HTTP_ERROR_416, -1);
 
 		// Range: is from first byte to last byte _inclusive_; will be subtracted
 		// in header reply later then
