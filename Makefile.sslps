@@ -1,0 +1,56 @@
+#
+# This is the Makefile for the Linux flavor
+#
+
+DEFS=-DUSE_SSL -DUSE_SSL_PRIVSEP
+LIBS=-lssl -lcrypto
+
+CXX=c++ -Wall -O2 $(DEFS)
+LD=c++
+
+all: lhttpd
+
+clean:
+	rm -f *.o
+
+distclean: clean
+	rm -f lhttpd
+
+lhttpd: lonely.o socket.o misc.o log.o multicore.o config.o flavor.o client.o sslps.o sslps_priv.o main.o
+	$(LD) $(LDFLAGS) lonely.o socket.o misc.o log.o multicore.o config.o\
+	                 flavor.o sslps.o sslps_priv.o\
+	                 client.o main.o -o lhttpd -lrt $(LIBS)
+
+sslps.o: sslps.c
+	$(CC) $(CFLAGS) -c sslps.c
+
+sslps_priv.o: sslps_priv.c
+	$(CC) $(CFLAGS) -c sslps_priv.c
+
+config.o: config.cc config.h
+	$(CXX) $(CFLAGS) -c config.cc
+
+multicore.o: multicore.cc multicore.h
+	$(CXX) $(CFLAGS) -c multicore.cc
+
+log.o: log.cc log.h
+	$(CXX) $(CFLAGS) -c log.cc
+
+misc.o: misc.cc misc.h
+	$(CXX) $(CFLAGS) -c misc.cc
+
+main.o: main.cc
+	$(CXX) $(CFLAGS) -c main.cc
+
+flavor.o: flavor-linux.cc flavor.h
+	$(CXX) $(CFLAGS) -c flavor-linux.cc -o flavor.o
+
+socket.o: socket.cc socket.h
+	$(CXX) $(CFLAGS) -c socket.cc
+
+lonely.o: lonely.cc lonely.h
+	$(CXX) $(CFLAGS) -c lonely.cc
+
+client.o: client.cc client.h
+	$(CXX) $(CFLAGS) -c client.cc
+
