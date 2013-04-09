@@ -2,11 +2,14 @@
 # This is the Makefile for the Linux flavor
 #
 
-DEFS=-DUSE_SSL -DUSE_SSL_PRIVSEP
+DEFS=-DUSE_SSL -DUSE_SSL_PRIVSEP #-DUSE_SECCOMP
 LIBS=-lssl -lcrypto
 
 CXX=c++ -Wall -O2 $(DEFS)
 LD=c++
+
+CC=cc -Wall -O2 $(DEFS)
+
 
 all: lhttpd
 

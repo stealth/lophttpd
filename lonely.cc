@@ -66,6 +66,13 @@ extern "C" {
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 }
+
+#ifdef USE_SSL_PRIVSEP
+extern "C" {
+#include "sslps.h"
+}
+#endif
+
 #endif
 
 using namespace std;
@@ -364,9 +371,11 @@ int lonely_http::setup_ssl(const string &cpath, const string &kpath)
 
 	SSL_CTX_set_session_cache_mode(ssl_ctx, SSL_SESS_CACHE_SERVER);
 
+#ifndef USE_SSL_PRIVSEP
 	SSL_CTX_sess_set_new_cb(ssl_ctx, http_client::new_session);
 	SSL_CTX_sess_set_remove_cb(ssl_ctx, http_client::remove_session);
 	SSL_CTX_sess_set_get_cb(ssl_ctx, http_client::get_session);
+#endif
 
 #endif
 

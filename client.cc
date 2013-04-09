@@ -45,6 +45,13 @@
 extern "C" {
 #include <openssl/ssl.h>
 }
+
+#ifdef USE_SSL_PRIVSEP
+extern "C" {
+#include "sslps.h"
+}
+#endif
+
 #endif
 
 
@@ -275,7 +282,8 @@ int http_client::ssl_accept(SSL_CTX *ssl_ctx)
 	if (!ssl) {
 		if ((ssl = SSL_new(ssl_ctx)) == NULL)
 			return -1;
-		SSL_set_fd(ssl, peer_fd);
+		if (SSL_set_fd(ssl, peer_fd) != 1)
+			return -1;
 		ssl_time = alive_time;
 	}
 
