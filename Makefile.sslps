@@ -1,7 +1,18 @@
 #
-# This is the Makefile for the Linux flavor
+# This is the Makefile for Linux, using openssl privilege separation and
+# SECCOMP for openssl
 #
+# git clone git://github.com/stealth/sslps
+#
+# Just copy the sslps.* and sslps_priv.* files into this directory
+# and "make -f Makefile.sslps". Do not worry about the redifinition
+# warnings.
+# The resulting lhttpd binary can be used as normal. You will notice by
+# the extra process that privsep is working. Multicore support is not
+# supported with privsep, so do not add any "-n" runtime switches.
 
+
+# also enable seccomp if your system supports it
 DEFS=-DUSE_SSL -DUSE_SSL_PRIVSEP #-DUSE_SECCOMP
 LIBS=-lssl -lcrypto
 
