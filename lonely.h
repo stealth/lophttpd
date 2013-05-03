@@ -96,7 +96,7 @@ template<typename T>
 class lonely {
 protected:
 	struct pollfd *pfds;
-	int first_fd, max_fd;
+	int first_fd, max_fd, top_fd;
 	T *peer;
 	T **fd2peer;
 	int peer_idx;
@@ -121,7 +121,8 @@ protected:
 
 public:
 	lonely()
-	 : first_fd(0), max_fd(0), peer(NULL), fd2peer(NULL), peer_idx(-1), n_clients(0), n_suspended(0), logger(NULL),
+	 : first_fd(0), max_fd(0), top_fd(0), peer(NULL), fd2peer(NULL), peer_idx(-1),
+	   n_clients(0), n_suspended(0), logger(NULL),
 	   cur_time(0), cur_usec(0), err(""), heavy_load(0), so_sndbuf(4096)
 	{
 	}

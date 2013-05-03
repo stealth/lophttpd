@@ -172,6 +172,9 @@ int main(int argc, char **argv)
 	if (sigaction(SIGHUP, &sa, NULL) < 0)
 		die("sigaction");
 
+	if (sigaction(SIGPIPE, &sa, NULL) < 0)
+		die("sigaction");
+
 	dup2(0, 2);
 
 	if (fork() > 0)

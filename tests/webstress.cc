@@ -37,8 +37,8 @@ enum {
 class webstress {
 
 	string host, port, path, err;
-	bool sequential, ssl;
-	int max_cl, peers, ever, ests, success, hdr_fail, write_fail, read_fail, to_fail, hup_fail, max_fd;
+	bool ssl;
+	int max_cl, peers, ever, ests, success, hdr_fail, write_fail, read_fail, to_fail, hup_fail, max_fd, max_success;
 	time_t now;
 
 	pollfd *pfds;
@@ -58,12 +58,12 @@ class webstress {
 	SSL_CTX *ssl_ctx;
 
 public:
-	webstress(const string &h, const string &p, const string &f, int max, bool seq = 0)
-		: host(h), port(p), path(f), err(""), sequential(seq), ssl(0), max_cl(max),
+	webstress(const string &h, const string &p, const string &f, int max, int max_s = -1)
+		: host(h), port(p), path(f), err(""), ssl(0), max_cl(max),
 		  peers(0), ever(0), ests(0), success(0), hdr_fail(0), write_fail(0), read_fail(0),
-	          to_fail(0), hup_fail(0), max_fd(0), pfds(NULL)
+	          to_fail(0), hup_fail(0), max_fd(0), max_success(max_s), pfds(NULL)
 	{
-		if (p == "443")
+		if (p == "443" || p == "4343")
 			ssl = 1;
 
 		ssl_method = NULL;
@@ -213,6 +213,9 @@ void webstress::print_stat(int fd)
 	       read_fail, hdr_fail, write_fail, to_fail, hup_fail, clients[fd]->obtained,
 	       path.c_str(),
 	       (double)clients[fd]->content_length/(now - clients[fd]->start_time)/(1024*1024));
+
+	if (max_success > 0 && success > max_success)
+		exit(0);
 }
 
 void webstress::calc_max_fd()
@@ -399,7 +402,10 @@ int webstress::loop()
 					clients[i]->time = now;
 					break;
 				case SSL_ERROR_WANT_READ:
-					pfds[i].events = POLLIN;
+					pfds[i].events |= POLLIN;
+					break;
+				case SSL_ERROR_WANT_WRITE:
+					pfds[i].events |= POLLOUT;
 					break;
 				default:
 					print_stat(i);
@@ -517,7 +523,7 @@ int main(int argc, char **argv)
 {
 
 	if (argc < 5) {
-		cerr<<"Usage: ws <host> <port> <path> <#clients>\n";
+		cerr<<"Usage: ws <host> <port> <path> <#clients> [stop-after]\n";
 		return 1;
 	}
 
@@ -525,7 +531,12 @@ int main(int argc, char **argv)
 		cerr<<"Minimum of 20 clients";
 		return 1;
 	}
-	webstress ws(argv[1], argv[2], argv[3], atoi(argv[4]), 0);
+
+	int max_s = -1;
+	if (argc == 6)
+		max_s = atoi(argv[5]);
+
+	webstress ws(argv[1], argv[2], argv[3], atoi(argv[4]), max_s);
 
 	if (ws.loop() < 0)
 		cerr<<ws.why()<<endl;

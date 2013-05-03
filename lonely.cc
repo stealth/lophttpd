@@ -181,6 +181,8 @@ int lonely<state_engine>::init(const string &host, const string &port, int a)
 		}
 	}
 
+	top_fd = rl.rlim_cur - 1;
+
 	int flags = fcntl(sock_fd, F_GETFL);
 	fcntl(sock_fd, F_SETFL, flags|O_NONBLOCK);
 
@@ -211,11 +213,6 @@ int lonely<state_engine>::init(const string &host, const string &port, int a)
 	fd2peer[sock_fd]->keep_alive = 1;
 	fd2peer[sock_fd]->peer_fd = sock_fd;
 
-
-	struct sigaction sa;
-	memset(&sa, 0, sizeof(sa));
-	sa.sa_handler = SIG_IGN;
-	sigaction(SIGPIPE, &sa, NULL);
 	return 0;
 }
 
@@ -404,7 +401,7 @@ int lonely_http::loop()
 	for (;;) {
 
 		// 0 means timeout which we also need to handle
-		if (poll(pfds, max_fd + 1, 3*1000) < 0)
+		if ((r = poll(pfds, max_fd + 1, 3*1000)) < 0)
 			continue;
 
 		memset(&tv, 0, sizeof(tv));
@@ -455,12 +452,13 @@ int lonely_http::loop()
 				continue;
 			}
 
+			pfds[i].revents = 0;
+
 			// All below states have an event pending, since we wont
 			// be here if revents would be 0
 
 			// new connection ready to accept?
 			if (peer->state() == STATE_ACCEPTING) {
-				pfds[i].revents = 0;
 				pfds[i].events = POLLIN|POLLOUT;
 				peer->alive_time = cur_time;
 
@@ -570,7 +568,7 @@ int lonely_http::loop()
 			if (!peer->keep_alive && peer->state() == STATE_CONNECTED)
 				shutdown(i);
 
-			pfds[i].revents = 0;
+
 		}
 		calc_max_fd();
 	}
