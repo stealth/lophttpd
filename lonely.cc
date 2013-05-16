@@ -64,6 +64,7 @@
 #ifdef USE_SSL
 extern "C" {
 #include <openssl/ssl.h>
+#include <openssl/engine.h>
 #include <openssl/err.h>
 }
 
@@ -344,8 +345,8 @@ int lonely_http::setup_ssl(const string &cpath, const string &kpath)
 		return -1;
 	}
 
-	if (SSL_CTX_use_certificate_file(ssl_ctx, cpath.c_str(), SSL_FILETYPE_PEM) != 1) {
-		err = "lonely_http::setup_ssl::SSL_CTX_use_certificate_file:";
+	if (SSL_CTX_use_certificate_chain_file(ssl_ctx, cpath.c_str()) != 1) {
+		err = "lonely_http::setup_ssl::SSL_CTX_use_certificate_chain_file:";
 		err += ERR_error_string(ERR_get_error(), NULL);
 		return -1;
 	}
