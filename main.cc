@@ -81,8 +81,10 @@ void help(const char *p)
 	    <<"\t\t -n : number of CPU cores to use, default 1 ('0' for all)"<<endl
 	    <<"\t\t -p : port, default "<<httpd_config::port<<endl<<endl
 	    <<"\trarely used options:\n\n"
+#ifdef USE_SSL
 	    <<"\t\t -K : use this keyfile (enables SSL)\n"
 	    <<"\t\t -C : use this certfile (enables SSL)\n"
+#endif
 	    <<"\t\t -6 : use IPv6, default is IPv4\n"
 	    <<"\t\t -l : logfile, default "<<httpd_config::logfile<<endl
 	    <<"\t\t -L : logprovider, default '"<<httpd_config::log_provider<<"'"<<endl

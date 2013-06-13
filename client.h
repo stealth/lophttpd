@@ -36,6 +36,7 @@
 #define __client_h__
 
 #include <string>
+#include <cstring>
 #include <time.h>
 #include <stdint.h>
 #include <sys/types.h>
