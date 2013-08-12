@@ -58,7 +58,6 @@ extern "C" {
 using namespace std;
 using namespace ns_socket;
 
-const int http_client::TIMEOUT_SSL = 3;
 
 // might be called twice, so no double-free's
 void http_client::cleanup()
@@ -70,7 +69,7 @@ void http_client::cleanup()
 	copied = left = 0;
 	offset = 0;
 	keep_alive = 0;
-	alive_time = header_time = ssl_time = 0;
+	alive_time = header_time = 0;
 	dev = ino = 0;
 	ct = in_queue = 0;
 	ftype = FILE_REGULAR;
@@ -100,7 +99,6 @@ ssize_t http_client::send(const char *buf, size_t n)
 		r = SSL_write(ssl, buf, n);
 		switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
-			ssl_time = alive_time;
 			break;
 		default:
 			r = -1;
@@ -122,8 +120,6 @@ ssize_t http_client::sendfile(size_t n)
 	char buf[n], siz[32];
 
 	if (ssl_enabled) {
-		if (alive_time - ssl_time > TIMEOUT_SSL)
-			return -1;
 		r = pread(file_fd, buf, n, offset);
 
 		if (ftype == FILE_PROC) {
@@ -146,7 +142,6 @@ ssize_t http_client::sendfile(size_t n)
 					return -1;
 				left = 0;
 			}
-			ssl_time = alive_time;
 			return r;
 		}
 
@@ -159,7 +154,6 @@ ssize_t http_client::sendfile(size_t n)
 		r = SSL_write(ssl, buf, r);
 		switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
-			ssl_time = alive_time;
 			break;
 		case SSL_ERROR_WANT_WRITE:
 		case SSL_ERROR_WANT_READ:
@@ -193,7 +187,10 @@ ssize_t http_client::recv(void *buf, size_t n)
 		r = SSL_read(ssl, buf, n);
 		switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
-			ssl_time = alive_time;
+			break;
+		case SSL_ERROR_WANT_WRITE:
+		case SSL_ERROR_WANT_READ:
+			r = 0;
 			break;
 		default:
 			r = -1;
@@ -227,20 +224,15 @@ ssize_t http_client::peek_req()
 			char skip = 0;
 			SSL_read(ssl, &skip, 1);
 			++req_idx;
-			ssl_time = alive_time;
 			return 1;
 		}
 
 		switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
-			ssl_time = alive_time;
 			break;
 		case SSL_ERROR_WANT_WRITE:
 		case SSL_ERROR_WANT_READ:
-			if (alive_time - ssl_time > TIMEOUT_SSL)
-				r = -1;
-			else
-				r = 0;
+			r = 0;
 			break;
 		default:
 			r = -1;
@@ -284,7 +276,6 @@ int http_client::ssl_accept(SSL_CTX *ssl_ctx)
 			return -1;
 		if (SSL_set_fd(ssl, peer_fd) != 1)
 			return -1;
-		ssl_time = alive_time;
 	}
 
 	r = SSL_accept(ssl);
@@ -294,14 +285,11 @@ int http_client::ssl_accept(SSL_CTX *ssl_ctx)
 		d_state = STATE_CONNECTED;
 		ssl_enabled = 1;
 		keep_alive = 1;
-		ssl_time = alive_time;
 		return 1;
 
 	// no complete handshake yet? Try later
 	case SSL_ERROR_WANT_READ:
 	case SSL_ERROR_WANT_WRITE:
-		if (alive_time - ssl_time > TIMEOUT_SSL)
-			return -1;
 		return 0;
 	default:
 		return -1;

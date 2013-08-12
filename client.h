@@ -76,8 +76,6 @@ class http_client {
 private:
 	status_t d_state;
 	bool ssl_enabled;
-	static const int TIMEOUT_SSL;
-	time_t ssl_time;
 
 public:
 	int file_fd, peer_fd;
@@ -100,7 +98,7 @@ public:
 #endif
 
 	http_client()
-	 : d_state(STATE_ERROR), ssl_enabled(0), ssl_time(0), file_fd(-1), peer_fd(-1), alive_time(0),
+	 : d_state(STATE_ERROR), ssl_enabled(0), file_fd(-1), peer_fd(-1), alive_time(0),
 	   header_time(0), keep_alive(0), offset(0), copied(0), left(0), dev(0),
 	   ino(0), path(""), from_ip(""), first_line(""), ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0),
 	   req_idx(0)

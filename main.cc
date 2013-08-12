@@ -157,6 +157,8 @@ extern "C" int privsep_init()
 int main(int argc, char **argv)
 {
 	int c = 0;
+	bool port_was_given = 0;
+
 	cout<<"\nlophttpd -- lots of performance httpd (C) 2008-2013 Sebastian Krahmer\n\n";
 
 	if (getuid() != 0) {
@@ -187,6 +189,7 @@ int main(int argc, char **argv)
 			break;
 		case 'p':
 			httpd_config::port = optarg;
+			port_was_given = 1;
 			break;
 		case 'l':
 			httpd_config::logfile = optarg;
@@ -276,6 +279,8 @@ int main(int argc, char **argv)
 	httpd_config::user_gid = pw->pw_gid;
 
 	if (httpd_config::cfile.size() && httpd_config::kfile.size()) {
+		if (!port_was_given)
+			httpd_config::port = "443";
 		httpd_config::use_ssl = 1;
 		if (httpd->setup_ssl(httpd_config::cfile, httpd_config::kfile) < 0) {
 			cerr<<"Unable to initialize SSL, exiting:\n";
