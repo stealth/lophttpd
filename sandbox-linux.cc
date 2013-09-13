@@ -101,7 +101,8 @@ static const struct sock_filter suffix[] = {
 
 static const struct sock_filter f1[] = {
 	SC_ALLOW(mmap),
-	SC_ALLOW(munmap)
+	SC_ALLOW(munmap),
+	SC_ALLOW(ftruncate)
 };
 
 
