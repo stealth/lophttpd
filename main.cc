@@ -351,16 +351,18 @@ int main(int argc, char **argv)
 	if (sigaction(SIGPIPE, &sa, NULL) < 0)
 		die("sigaction");
 
+	dup2(0, 2);
+
 	if (httpd_config::master) {
 		if (fork() > 0)
 			exit(0);
 		setsid();
 	}
 
-	if (flavor::sandbox() < 0)
-		die("Exit: setting up sandbox");
-
-	dup2(0, 2);
+	if (flavor::sandbox() < 0) {
+		httpd->log("Exit: error setting up sandbox");
+		exit(1);
+	}
 
 	httpd->loop();
 
