@@ -237,6 +237,16 @@ and append "-C pubkey.x509 -K serverkey.pem -p 443" to the lophttpd
 commandline. You then either import the X509 certificate into your browser
 or let it sign by some CA that is in your browsers CA chain.
 
+As of the Snowden-leaks it became certain that the public CA infrastructure
+is subverted and cannot be trusted if you need real security. So you
+should setup your own CA (howto is beyond this README) or import
+the generated X509 into your browser.
+Additionally lophttpd sets a cipher list that is believed to be
+secure (no export ciphers, no weak ciphers and no ECC ciphers -
+where most parameters are given by NIST). However it does not
+support PFS out of the box. If you need that, or you experiance
+problems with web browsers, you can override this list in
+the Makefile.
 
 
 If you have ideas and or offer performance/testing environment please

@@ -125,6 +125,14 @@ const string lonely_http::put_hdr_fmt =
 	"Content-Length: %zu\r\n"
 	"Content-Type: text/html\r\n\r\n";
 
+
+#ifdef USE_CIPHERS
+const string ciphers = USE_CIPHERS;
+#else
+const string ciphers = "!LOW:!EXP:!MD5:!CAMELLIA:!RC4:!MEDIUM:!DES:RSA:DH:EDH:AES256:SHA1:IDEA";
+#endif
+
+
 bool operator<(const inode &i1, const inode &i2)
 {
 	return memcmp(&i1, &i2, sizeof(i1)) < 0;
@@ -368,6 +376,13 @@ int lonely_http::setup_ssl(const string &cpath, const string &kpath)
 	}
 
 	SSL_CTX_set_session_cache_mode(ssl_ctx, SSL_SESS_CACHE_SERVER);
+
+	if (SSL_CTX_set_cipher_list(ssl_ctx, ciphers.c_str()) != 1) {
+		err = "lonely_http::setup_ssl::SSL_CTX_set_cipher_list:";
+		err += ERR_error_string(ERR_get_error(), NULL);
+		err += "(Try default cipher list in Makefile)";
+		return -1;
+	}
 
 #ifndef USE_SSL_PRIVSEP
 	SSL_CTX_sess_set_new_cb(ssl_ctx, http_client::new_session);

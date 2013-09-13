@@ -346,6 +346,8 @@ void generate_index(const string &path)
 
 	ftw(path.c_str(), ftw_helper, 1);
 
+	uid_t euid = geteuid();
+
 	for (i = dir2index.begin(); i != dir2index.end();) {
 		string &html = i->second;
 		html += "</pre><hr><p id=\"bottom\"><a href=\"http://github.com/stealth/lophttpd\">lophttpd powered</a></p></body></html>";
@@ -364,7 +366,7 @@ void generate_index(const string &path)
 
 			// if running initial (root), dont smash existing stuff,
 			// if USR1 is received, e.g. re-indexing, allow to update
-			if (geteuid() == 0)
+			if (euid == 0)
 				flags |= O_EXCL;
 			else
 				flags |= O_TRUNC;
@@ -380,7 +382,8 @@ void generate_index(const string &path)
 
 			// own to user, so re-generation of index files
 			// can really happen
-			fchown(fd, httpd_config::user_uid, httpd_config::user_gid);
+			if (euid == 0)
+				fchown(fd, httpd_config::user_uid, httpd_config::user_gid);
 			close(fd);
 
 			dir2index.erase(i++);

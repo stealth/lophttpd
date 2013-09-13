@@ -2,8 +2,15 @@
 # This is the Makefile for the Linux flavor
 #
 
+
 DEFS=-DUSE_SSL
 LIBS=-lssl -lcrypto
+
+# enable Linux seccomp sandboxing
+#DEFS+=-DUSE_SANDBOX
+
+#override lophttps secure cipher list
+#DEFS+="ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH"
 
 CXX=c++ -Wall -O2 $(DEFS)
 LD=c++

@@ -150,5 +150,12 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t
 	return r;
 }
 
+
+int sandbox()
+{
+	return 0;
+}
+
+
 }
 

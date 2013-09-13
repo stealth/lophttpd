@@ -61,6 +61,8 @@ int in_send_queue(int);
 // uses normal read/write if sendfile cannot be used. updates offset, left and copied accordingly
 ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, int);
 
+int sandbox();
+
 }
 
 #endif // __flavor_h__

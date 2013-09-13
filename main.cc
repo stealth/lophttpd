@@ -46,6 +46,7 @@
 #include <cstring>
 #include "config.h"
 #include "lonely.h"
+#include "flavor.h"
 #include "misc.h"
 #include "multicore.h"
 
@@ -329,7 +330,8 @@ int main(int argc, char **argv)
 		die("setuid", euid == 0);
 
 #ifdef USE_SSL_PRIVSEP
-	SSL_privsep_ctrl(PRIVSEP_DROP_PRIV);
+	if (SSL_privsep_ctrl(PRIVSEP_DROP_PRIV) < 0)
+		die("SSL_privsep_ctrl");
 #endif
 
 	if (httpd_config::virtual_hosts)
@@ -349,13 +351,16 @@ int main(int argc, char **argv)
 	if (sigaction(SIGPIPE, &sa, NULL) < 0)
 		die("sigaction");
 
-	dup2(0, 2);
-
 	if (httpd_config::master) {
 		if (fork() > 0)
 			exit(0);
 		setsid();
 	}
+
+	if (flavor::sandbox() < 0)
+		die("Exit: setting up sandbox");
+
+	dup2(0, 2);
 
 	httpd->loop();
 
