@@ -54,6 +54,7 @@
 namespace flavor {
 
 using namespace ns_socket;
+using namespace std;
 
 
 int accept(int fd, struct sockaddr *saddr, socklen_t *slen, int flags)
@@ -106,28 +107,41 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t
 
 	// proc and sys files
 	if (ftype == FILE_PROC) {
-		char buf[n], siz[32];
+		char *buf = NULL, siz[32];
+		buf = new (nothrow) char[n];
+		if (!buf)
+			return -1;
 		r = pread(fd, buf, sizeof(buf), *offset);
 		if (r < 0) {
 			if (errno == EAGAIN)
 				errno = EBADF;
+			delete [] buf;
 			return -1;
 		} else if (r > 0) {
 			l = snprintf(siz, sizeof(siz), "%x\r\n", (int)r);
-			if (writen(peer, siz, l) != l)
+			if (writen(peer, siz, l) != l) {
+				delete [] buf;
 				return -1;
-			if (writen(peer, buf, r) != r)
+			}
+			if (writen(peer, buf, r) != r) {
+				delete [] buf;
 				return -1;
-			if (writen(peer, "\r\n", 2) != 2)
+			}
+			if (writen(peer, "\r\n", 2) != 2) {
+				delete [] buf;
 				return -1;
+			}
 			*offset += r;
 			copied += r;
 		} else {
-			if (writen(peer, "0\r\n\r\n", 5) != 5)
+			if (writen(peer, "0\r\n\r\n", 5) != 5) {
+				delete [] buf;
 				return -1;
+			}
 			left = 0;
 			r = 5;
 		}
+		delete [] buf;
 		return r;
 	}
 

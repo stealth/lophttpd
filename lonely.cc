@@ -823,7 +823,7 @@ int lonely_http::TRACE()
 
 int lonely_http::upload()
 {
-	char buf[max_send];
+	char buf[0x1000];
 	ssize_t n = 0;
 
 	// upload file fd is closed via cleanup() in STATE_UPLOADING

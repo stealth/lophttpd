@@ -148,25 +148,29 @@ const unsigned int index_max_size = 10000;
 
 int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 {
-	char pathname[strlen(fpath) + 1];
-	snprintf(pathname, sizeof(pathname), "%s", fpath);
-	char *basename = strrchr(pathname, '/'), *parent = NULL;
+	string pathname = fpath, parent = "";
+
+	if (pathname.find("//") != string::npos || pathname.find("/../") != string::npos ||
+	    pathname.find("/./") != string::npos)
+		return -1;
+
+	string::size_type base = pathname.find_last_of("/");
+	string basename = "";
 	char spaces[40];
 
-	if (!basename)
+	if (base == string::npos)
 		return 0;
 
 	if (!S_ISDIR(st->st_mode) && !S_ISREG(st->st_mode) && !S_ISBLK(st->st_mode) &&
 	    !S_ISLNK(st->st_mode) && !S_ISCHR(st->st_mode))
 		return 0;
 
-	if (basename == pathname) {
-		parent = (char *)"/";
-		++basename;
+	if (base == 0) {
+		parent = "/";
+		basename = pathname.substr(1);
 	} else {
-		*basename = 0;
-		++basename;
-		parent = pathname;
+		basename = pathname.substr(base + 1);
+		parent = pathname.substr(0, base);
 	}
 
 	memset(spaces, ' ', sizeof(spaces) - 1);
@@ -196,10 +200,10 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		// otherwise it would be "/", which is not relative and wont
 		// work with reverse proxy + <base> tag, which only works for
 		// relative URLs
-		if (strcmp(parent, "/") == 0)
+		if (parent == "/")
 			html += httpd_config::base;
 		else
-			html += parent + 1;
+			html += parent.substr(1);
 		html += "\">Parent Directory</a>\n\n";
 
 		if (dir2index.find(fpath) == dir2index.end())
@@ -207,7 +211,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 
 		if (dir2index.find(parent) != dir2index.end())
 			html = dir2index[parent];
-		if (!*basename)
+		if (basename == "")
 			return 0;
 
 		html += "[DIR ]";
@@ -216,8 +220,8 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += "\">";
 		html += basename;
 		html += "</a>";
-		if (strlen(basename) < sizeof(spaces))
-			html += string(spaces, sizeof(spaces) - strlen(basename));
+		if (basename.size() < sizeof(spaces))
+			html += string(spaces, sizeof(spaces) - basename.size());
 		else
 			html += "  ";
 
@@ -241,8 +245,8 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += "\">";
 		html += basename;
 		html += "</a>";
-		if (strlen(basename) < sizeof(spaces))
-			html += string(spaces, sizeof(spaces) - strlen(basename));
+		if (basename.size() < sizeof(spaces))
+			html += string(spaces, sizeof(spaces) - basename.size());
 		else
 			html += "  ";
 		html += mod_time;
@@ -256,8 +260,8 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += "\">";
 		html += basename;
 		html += "</a>";
-		if (strlen(basename) < sizeof(spaces))
-			html += string(spaces, sizeof(spaces) - strlen(basename));
+		if (basename.size() < sizeof(spaces))
+			html += string(spaces, sizeof(spaces) - basename.size());
 		else
 			html += "  ";
 		html += mod_time;
