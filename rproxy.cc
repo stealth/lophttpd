@@ -719,7 +719,7 @@ int rproxy::mangle_request_header()
 	} else {
 		// Already decided about a node for this IP/path combination?
 		map<pair<string, string>, struct backend>::iterator j =
-			client_map.find(make_pair<string, string>(from_ip, match->first));
+			client_map.find(make_pair(from_ip, match->first));
 
 		if (j != client_map.end()) {
 			b = j->second;
@@ -727,7 +727,7 @@ int rproxy::mangle_request_header()
 			b = match->second.front();
 			match->second.pop_front();
 			match->second.push_back(b);
-			client_map[make_pair<string, string>(from_ip, match->first)] = b;
+			client_map[make_pair(from_ip, match->first)] = b;
 		}
 	}
 

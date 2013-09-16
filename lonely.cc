@@ -47,7 +47,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
-
+#include <map>
 #include <sys/stat.h>
 #include <sys/resource.h>
 #include <netinet/in.h>
@@ -988,7 +988,7 @@ int lonely_http::stat()
 		peer->ino = cur_stat.st_ino;
 		peer->ct = ct;
 		if (cacheit)
-			stat_cache[p] = make_pair<struct stat, int>(cur_stat, ct);
+			stat_cache[p] = make_pair(cur_stat, ct);
 	}
 
 	return r;
