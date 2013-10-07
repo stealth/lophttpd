@@ -304,7 +304,7 @@ int webstress::loop()
 	for (;;) {
 		now = time(NULL);
 		while (peers + 10 < max_cl) {
-			if ((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
+			if ((sock = socket(ai->ai_family, SOCK_STREAM, 0)) < 0) {
 				err = "webstress::loop::socket:";
 				err += strerror(errno);
 				return -1;
