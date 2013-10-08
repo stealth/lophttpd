@@ -87,32 +87,16 @@ int reuse(int sock)
 }
 
 
-int bind_local(int sock, const string &host, const string &port, bool do_listen, int af)
+int bind_local(int sock, const struct sockaddr *s, socklen_t slen, bool do_listen)
 {
-	struct addrinfo *ai = NULL, hints;
-	int r;
-
-	memset(&hints, 0, sizeof(hints));
-
-	hints.ai_family = af;
-	hints.ai_socktype = SOCK_STREAM;
-
-	if ((r = getaddrinfo(host.c_str(), port.c_str(), &hints, &ai)) < 0) {
-		error = "ns_socket::bind_local::getaddrinfo:";
-		error += gai_strerror(r);
-		return -1;
-	}
-
 	if (reuse(sock) < 0)
 		return -1;
 
-	if (bind(sock, ai->ai_addr, ai->ai_addrlen) < 0) {
+	if (bind(sock, s, slen) < 0) {
 		error = "ns_socket::bind_local::bind: ";
 		error += strerror(errno);
 		return -1;
 	}
-
-	freeaddrinfo(ai);
 
 	if (do_listen) {
 		if (listen(sock, 100000) < 0) {
@@ -130,22 +114,32 @@ int bind_local(int sock, const string &host, const string &port, bool do_listen,
 }
 
 
-int bind_local(int sock, u_int16_t port, bool do_listen, int tries)
+int bind_local(int sock, uint16_t port, int af, bool do_listen, int tries)
 {
-	struct sockaddr_in saddr;
+	sockaddr_in sin4;
+	sockaddr_in6 sin6;
+	sockaddr *sin = (sockaddr *)&sin4;
+	socklen_t slen = sizeof(sin4);
+
+	if (af == AF_INET6) {
+		sin = (sockaddr *)&sin6;
+		slen = sizeof(sin6);
+	}
+
 	// XXX: static since connect will ne non-blocking, thus bind() will never fail
 	static int i = 0;
 
-	memset(&saddr, 0, sizeof(saddr));
+	memset(&sin4, 0, sizeof(sin4));
+	memset(&sin6, 0, sizeof(sin6));
 
-	saddr.sin_family = AF_INET;
+	sin4.sin_family = sin6.sin6_family = af;
 
 	if (reuse(sock) < 0)
 		return -1;
 
 	for (; i < tries; ++i) {
-		saddr.sin_port = htons(port + i);
-		if (bind(sock, (struct sockaddr*)&saddr, sizeof(saddr)) < 0 && 
+		sin4.sin_port = sin6.sin6_port = htons(port + i);
+		if (bind(sock, sin, slen) < 0 && 
 		    (errno != EADDRINUSE || i == tries - 1)) {
 			error = "ns_socket::bind_local::bind: ";
 			error += strerror(errno);
@@ -180,7 +174,7 @@ int tcp_connect_nb(const struct addrinfo &ai, uint16_t local_port)
 	//int one = 1;
 	//setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one ,sizeof(one));
 	if (local_port > 0) {
-		if (bind_local(sock, local_port, 0, 1000) < 0)
+		if (bind_local(sock, local_port, ai.ai_family, 0, 1000) < 0)
 			return -1;
 	}
 

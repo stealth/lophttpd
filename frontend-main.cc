@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Sebastian Krahmer.
+ * Copyright (C) 2012-2013 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -117,7 +117,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	if (proxy->init(rproxy_config::host, rproxy_config::port, AF_INET) < 0) {
+	if (proxy->init(rproxy_config::host, rproxy_config::port) < 0) {
 		proxy->log(proxy->why());
 		exit(-1);
 	}

@@ -49,9 +49,9 @@ int reuse(int sock);
 
 int dstaddr(int sock, sockaddr_in *dst);
 
-int bind_local(int sock, const std::string &h, const std::string &p, bool do_listen, int af = AF_INET);
+int bind_local(int sock, const sockaddr *, socklen_t, bool do_listen);
 
-int bind_local(int sock, u_int16_t port, bool do_listen, int tries);
+int bind_local(int sock, uint16_t port, bool do_listen, int tries);
 
 int tcp_connect_nb(const struct addrinfo &, uint16_t);
 

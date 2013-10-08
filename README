@@ -155,11 +155,12 @@ IPv6
 ----
 
 Since version > 0.91 lophttpd also supports IPv6, by simply using "-6"
-command-line switch. The default bind goes to "::0" then, so
-if you want to bind to a specific IPv6 address, you have to
-add -I switch *after* -6. You can either run IPv4 or IPv6 in once
-instance, not both. But you can run two lophttpd's: one with IPv4
-and one with IPv6 if needed.
+command-line switch. The default bind goes to "::" unless
+given -l local bind address.
+You can either run IPv4 or IPv6 in one instance, not both. But you can run
+two lophttpd's: one with IPv4 and one with IPv6 if needed.
+Frontend reverse proxy also supports IPv6, both on the frontend and
+the backend side. You can even mix IPv4 and IPv6 backend nodes.
 
 
 Proxies

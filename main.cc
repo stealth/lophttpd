@@ -170,8 +170,8 @@ int main(int argc, char **argv)
 	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQN:C:K:e:s:")) != -1) {
 		switch (c) {
 		case '6':
-			httpd_config::host = "::0";
-			httpd_config::af = AF_INET6;
+			if (httpd_config::host == "0.0.0.0")
+				httpd_config::host = "::";
 			break;
 		case 'i':
 			httpd_config::gen_index = 1;
@@ -290,7 +290,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (httpd->init(httpd_config::host, httpd_config::port, httpd_config::af) < 0) {
+	if (httpd->init(httpd_config::host, httpd_config::port) < 0) {
 		cerr<<httpd->why()<<endl;
 		return -1;
 	}

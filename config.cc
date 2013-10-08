@@ -21,7 +21,7 @@ namespace httpd_config
 	string user = "wwwrun", logfile = "/var/log/lophttpd", log_provider = "file";
 	uid_t user_uid = 99, user_gid = 99;
 	string host = "0.0.0.0", port = "80";
-	int cores = 1, af = AF_INET;
+	int cores = 1;
 
 	// on multicore there is only one master
 	int master = 1;
@@ -58,7 +58,6 @@ int parse(const string &cfile)
 	struct addrinfo *ai = NULL, hints;
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_family = AF_INET;
 	while (fgets(buf, sizeof(buf), f)) {
 		ptr = buf;
 		while (*ptr == ' ' || *ptr == '\t')
@@ -73,14 +72,16 @@ int parse(const string &cfile)
 
 			string opath = "";
 			backend b;
-			strtok(ptr, " \t\n#");
+
+			// No '#' token in 'map' allowed due to port specifier
+			strtok(ptr, " \t");
 			opath = ptr;
-			ptr = strtok(NULL, " \t\n#");
+			ptr = strtok(NULL, " \t\n");
 
 			memset(host, 0, sizeof(host));
 			memset(path, 0, sizeof(path));
-			if (strchr(ptr + 5, ':')) {
-				if (sscanf(ptr, "http://%255[^:]:%hu/%255c", host, &b.port, path) == 0) {
+			if (strchr(ptr + 5, '#')) {
+				if (sscanf(ptr, "http://%255[^#]#%hu/%255c", host, &b.port, path) == 0) {
 					err = "rproxy_config::parse::sscanf: invalid 'map' config.";
 					return -1;
 				}

@@ -62,9 +62,15 @@ int rproxy::loop()
 	size_t n = 0;
 	struct tm tm;
 	struct timeval tv;
-	sockaddr_in sin;
-	socklen_t slen = sizeof(sin);
+	sockaddr_in sin4;
+	sockaddr_in6 sin6;
+	sockaddr *sin = (sockaddr *)&sin4;
+	socklen_t slen = sizeof(sin4);
 
+	if (af == AF_INET6) {
+		sin = (sockaddr *)&sin6;
+		slen = sizeof(sin6);
+	}
 
 	for (;;) {
 		if (poll(pfds, max_fd + 1, 1000) < 0)
@@ -133,7 +139,7 @@ int rproxy::loop()
 				pfds[i].revents = 0;
 				for (;;) {
 					heavy_load = 0;
-					afd = flavor::accept(i, (struct sockaddr *)&sin, &slen, flavor::NONBLOCK);
+					afd = flavor::accept(i, sin, &slen, flavor::NONBLOCK);
 					if (afd < 0) {
 						if (errno == EMFILE || errno == ENFILE)
 							heavy_load = 1;
@@ -154,8 +160,13 @@ int rproxy::loop()
 						}
 					}
 
-					if (inet_ntop(af, &sin.sin_addr, from, sizeof(from)) < 0)
-						continue;
+					if (af == AF_INET) {
+						if (inet_ntop(af, &sin4.sin_addr, from, sizeof(from)) < 0)
+							continue;
+					} else {
+						if (inet_ntop(af, &sin6.sin6_addr, from, sizeof(from)) < 0)
+							continue;
+					}
 
 					fd2peer[afd]->from_ip = from;
 					fd2peer[afd]->fd = afd;

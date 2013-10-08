@@ -129,7 +129,7 @@ public:
 
 	virtual ~lonely() { delete [] pfds; delete logger; }
 
-	int init(const std::string &, const std::string &, int a = AF_INET);
+	int init(const std::string &, const std::string &);
 
 	int open_log(const std::string &, const std::string &, int core);
 

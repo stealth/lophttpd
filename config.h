@@ -18,7 +18,7 @@ namespace httpd_config
 	extern std::string user, logfile, log_provider;
 	extern uid_t user_uid, user_gid;
 	extern std::string host, port;
-	extern int cores, master, af;
+	extern int cores, master;
 	extern uint16_t mss;
 	extern uint32_t max_connections;
 	extern uint32_t ncache;

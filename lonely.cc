@@ -46,6 +46,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netdb.h>
 #include <sys/time.h>
 #include <map>
 #include <sys/stat.h>
@@ -147,28 +148,43 @@ const char *lonely<state_engine>::why()
 
 
 template<typename state_engine>
-int lonely<state_engine>::init(const string &host, const string &port, int a)
+int lonely<state_engine>::init(const string &host, const string &port)
 {
 	struct timeval tv;
+	int r = 0;
 
 	gettimeofday(&tv, NULL);
 	cur_time = tv.tv_sec;
 	cur_usec = tv.tv_usec;
 
-	af = a;
+	addrinfo hints, *ai = NULL;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_socktype = SOCK_STREAM;
+
+	if ((r = getaddrinfo(host.c_str(), port.c_str(), &hints, &ai)) != 0) {
+		err = "lonely::init:: getaddrinfo: ";
+		err += gai_strerror(r);
+		return -1;
+	}
+
+	af = ai->ai_family;
 
 	int sock_fd = socket(af, SOCK_STREAM, 0);
 	if (sock_fd < 0) {
+		freeaddrinfo(ai);
 		err = "lonely::init::socket:";
 		err += strerror(errno);
 		return -1;
 	}
 
 	// bind & listen
-	if (bind_local(sock_fd, host, port, 1, af) < 0) {
+	if (bind_local(sock_fd, ai->ai_addr, ai->ai_addrlen, 1) < 0) {
+		freeaddrinfo(ai);
 		err = ns_socket::why();
 		return -1;
 	}
+
+	freeaddrinfo(ai);
 
 	socklen_t olen = sizeof(so_sndbuf);
 	getsockopt(sock_fd, SOL_SOCKET, SO_SNDBUF, &so_sndbuf, &olen);
