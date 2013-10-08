@@ -307,6 +307,10 @@ int main(int argc, char **argv)
 		}
 	}
 
+	// Must happen before chroot()
+	if (initgroups(httpd_config::user.c_str(), httpd_config::user_gid) < 0)
+		die("initgroups", euid == 0);
+
 	if (chdir(httpd_config::root.c_str()) < 0)
 		die("chdir");
 
@@ -324,8 +328,6 @@ int main(int argc, char **argv)
 
 	if (setgid(httpd_config::user_gid) < 0)
 		die("setgid", euid == 0);
-	if (initgroups(httpd_config::user.c_str(), httpd_config::user_gid) < 0)
-		die("initgroups", euid == 0);
 	if (setuid(httpd_config::user_uid) < 0)
 		die("setuid", euid == 0);
 

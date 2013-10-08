@@ -133,16 +133,21 @@ int main(int argc, char **argv)
 		die("prctl");
 #endif
 
+	// Must happen before chroot()
+	if (initgroups(rproxy_config::user.c_str(), pw->pw_gid) < 0)
+		die("initgroups", euid == 0);
+
 	chdir("/");
 	if (chroot(rproxy_config::root.c_str()) < 0)
 		die("chroot", euid == 0);
 
 	if (setgid(pw->pw_gid) < 0)
 		die("setgid", euid == 0);
-	if (initgroups(rproxy_config::user.c_str(), pw->pw_gid) < 0)
-		die("initgroups", euid == 0);
 	if (setuid(pw->pw_uid) < 0)
 		die("setuid", euid == 0);
+
+// Commented because not needed. Only for IP_TRANSPARENT support
+// if it ever comes
 #if 0
 	cap_t my_caps;
 	cap_value_t cv[2] = {CAP_NET_ADMIN, CAP_NET_BIND_SERVICE};
