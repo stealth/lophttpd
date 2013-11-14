@@ -10,7 +10,7 @@ LIBS=-lssl -lcrypto
 #DEFS+=-DUSE_SANDBOX
 
 #override lophttps secure cipher list
-#DEFS+=-DUSE_CIPHERS=\"ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH\"
+#DEFS+=-DUSE_CIPHERS=\"ALL:!ADH:!LOW:!EXP:!RC4:!MD5:@STRENGTH\"
 
 CXX=c++ -Wall -O2 $(DEFS) -ansi
 LD=c++
