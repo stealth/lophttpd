@@ -262,6 +262,10 @@ int main(int argc, char **argv)
 	nice(-20);
 	close_fds();
 
+	rlimit rl = {0, 0};
+	if (setrlimit(RLIMIT_CORE, &rl) < 0)
+		cerr<<"Warning: Unable to set corefile-size to 0, continuing.\n";
+
 	if (httpd_config::mss == 0)
 		httpd_config::mss = DEFAULT_SEND_SIZE;
 
