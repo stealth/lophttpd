@@ -114,15 +114,14 @@ ssize_t http_client::send(const char *buf, size_t n)
 
 ssize_t http_client::sendfile(size_t n)
 {
-
 #ifdef USE_SSL
 	ssize_t r = 0, l = 0;
 	char *buf = NULL, siz[32];
 
-	if ((buf = new (nothrow) char[n]) == NULL)
-		return -1;
-
 	if (ssl_enabled) {
+		if ((buf = new (nothrow) char[n]) == NULL)
+			return -1;
+
 		r = pread(file_fd, buf, n, offset);
 
 		if (ftype == FILE_PROC) {
