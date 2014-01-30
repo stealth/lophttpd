@@ -6,7 +6,7 @@
 
 
 
-#if defined linux && !defined ANDROID
+#if defined __linux__ && !defined ANDROID
 
 #include <cstdio>
 #include <cstdlib>
