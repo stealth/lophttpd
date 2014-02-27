@@ -310,7 +310,7 @@ void lonely<state_engine>::calc_max_fd()
 
 
 template<typename state_engine>
-int lonely<state_engine>::open_log(const string &logfile, const string &method, int core = 0)
+int lonely<state_engine>::open_log(const string &logfile, const string &method, int core)
 {
 	logger = new (nothrow) log_provider;
 	if (!logger) {
@@ -513,7 +513,7 @@ int lonely_http::loop()
 					// We reuse previously allocated but 'cleanup'ed memory to save
 					// speed for lotsa new/delete calls on heavy traffic
 					if (!fd2peer[afd]) {
-						fd2peer[afd] = new (nothrow) struct http_client;
+						fd2peer[afd] = new (nothrow) http_client;
 
 						if (!fd2peer[afd]) {
 							cleanup(afd);
@@ -891,9 +891,9 @@ int lonely_http::PUT()
 
 	if (httpd_config::rand_upload) {
 		char rnd[64];
-		struct timespec ts;
-		clock_gettime(CLOCK_REALTIME, &ts);
-		snprintf(rnd, sizeof(rnd), "-%08lx%08lx%08lx", cur_time, cur_usec, ts.tv_nsec);
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
+		snprintf(rnd, sizeof(rnd), "-%08lx%08lx%08lx", cur_time, (unsigned long)cur_usec, (unsigned long)tv.tv_usec);
 		p += rnd;
 	}
 

@@ -131,7 +131,7 @@ public:
 
 	int init(const std::string &, const std::string &);
 
-	int open_log(const std::string &, const std::string &, int core);
+	int open_log(const std::string &, const std::string &, int core = 0);
 
 	void log(const std::string &);
 
