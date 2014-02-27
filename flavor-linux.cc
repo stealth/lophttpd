@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Sebastian Krahmer.
+ * Copyright (C) 2008-2014 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -107,41 +107,29 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t
 
 	// proc and sys files
 	if (ftype == FILE_PROC) {
-		char *buf = NULL, siz[32];
-		buf = new (nothrow) char[n];
-		if (!buf)
-			return -1;
+		// OK, cannot be larger than MAX_SEND_SIZE
+		char buf[n], siz[32];
 		r = pread(fd, buf, sizeof(buf), *offset);
 		if (r < 0) {
 			if (errno == EAGAIN)
 				errno = EBADF;
-			delete [] buf;
 			return -1;
 		} else if (r > 0) {
 			l = snprintf(siz, sizeof(siz), "%x\r\n", (int)r);
-			if (writen(peer, siz, l) != l) {
-				delete [] buf;
+			if (writen(peer, siz, l) != l)
 				return -1;
-			}
-			if (writen(peer, buf, r) != r) {
-				delete [] buf;
+			if (writen(peer, buf, r) != r)
 				return -1;
-			}
-			if (writen(peer, "\r\n", 2) != 2) {
-				delete [] buf;
+			if (writen(peer, "\r\n", 2) != 2)
 				return -1;
-			}
 			*offset += r;
 			copied += r;
 		} else {
-			if (writen(peer, "0\r\n\r\n", 5) != 5) {
-				delete [] buf;
+			if (writen(peer, "0\r\n\r\n", 5) != 5)
 				return -1;
-			}
 			left = 0;
 			r = 5;
 		}
-		delete [] buf;
 		return r;
 	}
 

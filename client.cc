@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2013 Sebastian Krahmer.
+ * Copyright (C) 2008-2014 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -114,13 +114,13 @@ ssize_t http_client::send(const char *buf, size_t n)
 
 ssize_t http_client::sendfile(size_t n)
 {
-#ifdef USE_SSL
-	ssize_t r = 0, l = 0;
-	char *buf = NULL, siz[32];
 
+#ifdef USE_SSL
 	if (ssl_enabled) {
-		if ((buf = new (nothrow) char[n]) == NULL)
-			return -1;
+		ssize_t r = 0, l = 0;
+
+		// OK, n cannot be larger than MAX_SEND_SIZE
+		char buf[n], siz[32];
 
 		r = pread(file_fd, buf, n, offset);
 
@@ -128,44 +128,32 @@ ssize_t http_client::sendfile(size_t n)
 			if (r < 0) {
 				if (errno == EAGAIN)
 					errno = EBADF;
-				delete [] buf;
 				return -1;
 			} else if (r > 0) {
 				l = snprintf(siz, sizeof(siz), "%x\r\n", (int)r);
-				if (SSL_write(ssl, siz, l) != l) {
-					delete [] buf;
+				if (SSL_write(ssl, siz, l) != l)
 					return -1;
-				}
-				if (SSL_write(ssl, buf, r) != r) {
-					delete [] buf;
+				if (SSL_write(ssl, buf, r) != r)
 					return -1;
-				}
-				if (SSL_write(ssl, "\r\n", 2) != 2) {
-					delete [] buf;
+				if (SSL_write(ssl, "\r\n", 2) != 2)
 					return -1;
-				}
 				offset += r;
 				copied += r;
 			} else {
-				if (SSL_write(ssl, "0\r\n\r\n", 5) != 5) {
-					delete [] buf;
+				if (SSL_write(ssl, "0\r\n\r\n", 5) != 5)
 					return -1;
-				}
 				left = 0;
 			}
-			delete [] buf;
 			return r;
 		}
 
 		if (r <= 0) {
 			if (errno == EAGAIN)
 				errno = EBADF;
-			delete [] buf;
 			return -1;
 		}
 
 		r = SSL_write(ssl, buf, r);
-		delete [] buf;
 
 		switch (SSL_get_error(ssl, r)) {
 		case SSL_ERROR_NONE:
