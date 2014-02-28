@@ -105,13 +105,17 @@ int in_send_queue(int peer)
 
 ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, int ftype)
 {
+	if (n > MAX_SEND_SIZE)
+		return -1;
+
 	off_t sbytes = 0;
 	ssize_t r = 0, l = 0;
 
 	// proc files
 	if (ftype == FILE_PROC) {
-		char buf[n], siz[32];
-		r = pread(fd, buf, sizeof(buf), *offset);
+		// n cannot be larger than MAX_SEND_SIZE
+		char buf[MAX_SEND_SIZE], siz[32];
+		r = pread(fd, buf, n, *offset);
 		if (r < 0) {
 			if (errno == EAGAIN)
 				errno = EBADF;
@@ -147,7 +151,8 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t
 			r = (ssize_t)sbytes;
 	// On FreeBSD, device files do not support sendfile()
 	} else {
-		char buf[n];
+		// n cannot be larger than MAX_SEND_SIZE
+		char buf[MAX_SEND_SIZE];
 		r = pread(fd, buf, n, *offset);
 		if (r > 0) {
 			// write(), not writen()

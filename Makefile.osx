@@ -4,13 +4,13 @@
 # You need to install Xcode and its commandline tools
 
 
-DEFS=-ansi -DUSE_SSL -w
+DEFS=-DUSE_SSL
 LIBS=-lssl -lcrypto
 
 #override lophttps secure cipher list
 #DEFS+=-DUSE_CIPHERS=\"ALL:!ADH:!LOW:!EXP:!RC4:!MD5:@STRENGTH\"
 
-CXX=c++ -Wall -O2 $(DEFS)
+CXX=c++ -w -O2 $(DEFS) -ansi -std=c++11
 LD=c++
 
 all: lhttpd frontend

@@ -40,6 +40,7 @@
 #include "flavor.h"
 #include "socket.h"
 #include "client.h"
+#include "lonely.h"
 
 #ifdef USE_SSL
 extern "C" {
@@ -114,13 +115,15 @@ ssize_t http_client::send(const char *buf, size_t n)
 
 ssize_t http_client::sendfile(size_t n)
 {
+	if (n > MAX_SEND_SIZE)
+		return -1;
 
 #ifdef USE_SSL
 	if (ssl_enabled) {
 		ssize_t r = 0, l = 0;
 
 		// OK, n cannot be larger than MAX_SEND_SIZE
-		char buf[n], siz[32];
+		char buf[MAX_SEND_SIZE], siz[32];
 
 		r = pread(file_fd, buf, n, offset);
 

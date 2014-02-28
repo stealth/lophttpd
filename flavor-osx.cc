@@ -103,13 +103,15 @@ int in_send_queue(int fd)
 
 ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, int ftype)
 {
+	if (n > MAX_SEND_SIZE)
+		return -1;
+
 	ssize_t r = 0, l = 0;
-	char buf[n];
 
 	// proc and sys files
 	if (ftype == FILE_PROC) {
-		char siz[32];
-		r = pread(fd, buf, sizeof(buf), *offset);
+		char buf[MAX_SEND_SIZE], siz[32];
+		r = pread(fd, buf, n, *offset);
 		if (r < 0) {
 			if (errno == EAGAIN)
 				errno = EBADF;

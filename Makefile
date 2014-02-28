@@ -12,7 +12,7 @@ LIBS=-lssl -lcrypto
 #override lophttps secure cipher list
 #DEFS+=-DUSE_CIPHERS=\"ALL:!ADH:!LOW:!EXP:!RC4:!MD5:@STRENGTH\"
 
-CXX=c++ -Wall -O2 $(DEFS) -ansi
+CXX=c++ -Wall -O2 $(DEFS) -ansi -std=c++11
 LD=c++
 
 all: lhttpd frontend
