@@ -278,7 +278,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		else if (size > 1024)
 			sprintf(sbuf, " %8.2fKB  ", ((double)size)/1024);
 		else
-			sprintf(sbuf, " %8zdB   ", size);
+			sprintf(sbuf, " %8zdB   ", (size_t)size);
 
 		html += sbuf;
 		int i = find_ctype(basename);
