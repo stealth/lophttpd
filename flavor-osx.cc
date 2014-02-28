@@ -41,7 +41,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
-
+#include <sys/uio.h>
+#include <sys/disk.h>
 #include "socket.h"
 #include "flavor.h"
 #include "lonely.h"
@@ -69,7 +70,7 @@ int accept(int fd, struct sockaddr *saddr, socklen_t *slen, int flags)
 
 bool servable_device(const struct stat &st)
 {
-	return 0;
+	return S_ISBLK(st.st_mode);
 }
 
 
@@ -80,9 +81,17 @@ bool servable_file(const struct stat &st)
 }
 
 
-int device_size(const std::string &path, size_t &size)
+int device_size(const std::string &path, off_t &size)
 {
-	return -1;
+	int fd = ::open(path.c_str(), O_RDONLY|O_NOCTTY);
+	if (fd < 0)
+		return -1;
+
+	int r = 0;
+	if (ioctl(fd, DKIOCGETBLOCKCOUNT, &size) < 0)
+		r = -1;
+	close(fd);
+	return r;
 }
 
 
@@ -124,13 +133,13 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t
 		return r;
 	}
 
-	if ((r = pread(fd, buf, sizeof(buf), *offset)) < 0)
+	off_t count = n;
+	if (::sendfile(fd, peer, *offset, &count, NULL, 0) != 0)
 		return -1;
-	if ((r = write(peer, buf, r)) <= 0)
-		return -1;
-	left -= r;
-	copied += r;
-	*offset += r;
+
+	left -= count;
+	copied += count;
+	*offset += count;
 	return r;
 }
 

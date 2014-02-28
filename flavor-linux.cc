@@ -76,7 +76,7 @@ bool servable_file(const struct stat &st)
 }
 
 
-int device_size(const std::string &path, size_t &size)
+int device_size(const std::string &path, off_t &size)
 {
 	int fd = ::open(path.c_str(), O_RDONLY|O_NOCTTY);
 	if (fd < 0)

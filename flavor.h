@@ -53,7 +53,7 @@ bool servable_device(const struct stat &);
 
 bool servable_file(const struct stat &);
 
-int device_size(const std::string &, size_t &);
+int device_size(const std::string &, off_t &);
 
 int in_send_queue(int);
 
@@ -64,6 +64,7 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t
 int sandbox();
 
 }
+
 
 #endif // __flavor_h__
 

@@ -991,7 +991,7 @@ int lonely_http::stat()
 		} else if (flavor::servable_device(cur_stat)) {
 			if (cur_stat.st_size == 0) {
 				// updates size if apropriate
-				size_t size;
+				off_t size;
 				if (flavor::device_size(p, size) < 0)
 					return -1;
 				cur_stat.st_size = size;

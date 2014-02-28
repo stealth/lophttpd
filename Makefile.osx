@@ -4,8 +4,8 @@
 # You need to install Xcode and its commandline tools
 
 
-DEFS=-ansi
-LIBS=
+DEFS=-ansi -DUSE_SSL -w
+LIBS=-lssl -lcrypto
 
 #override lophttps secure cipher list
 #DEFS+=-DUSE_CIPHERS=\"ALL:!ADH:!LOW:!EXP:!RC4:!MD5:@STRENGTH\"

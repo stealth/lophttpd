@@ -267,7 +267,7 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 		html += mod_time;
 		char sbuf[128];
 		// st is const
-		size_t size = (size_t)st->st_size;
+		off_t size = st->st_size;
 		if (!size && flavor::servable_device(*st)) {
 			flavor::device_size(fpath, size);
 		}
