@@ -663,7 +663,11 @@ int lonely_http::send_genindex()
 	if (peer->offset >= (off_t)idx.size())
 		return -1;
 
-	if ((r = peer->send(idx.c_str() + peer->offset, idx.size() - peer->offset)) <= 0)
+	off_t n = peer->left;
+	if (n > n_send)
+		n = n_send;
+
+	if ((r = peer->send(idx.c_str() + peer->offset, (size_t)n)) <= 0)
 		return -1;
 
 	peer->offset += r;
@@ -736,12 +740,12 @@ int lonely_http::download()
 		}
 	}
 
-	size_t n = peer->left;
+	off_t n = peer->left;
 	if (n > n_send)
 		n = n_send;
 
 	errno = 0;
-	r = peer->sendfile(n);
+	r = peer->sendfile((size_t)n);
 
 	// Dummy reset of r, if EAGAIN appears on nonblocking socket
 	// proc-files are written in chunks, so everything is lost anyway
