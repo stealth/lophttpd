@@ -640,6 +640,7 @@ int lonely_http::send_http_header()
 
 int lonely_http::send_genindex()
 {
+	int l = 0, r = 0;
 	const string &p = peer->path;
 	string idx = "";
 
@@ -647,19 +648,32 @@ int lonely_http::send_genindex()
 	if (i != misc::dir2index.end())
 		idx = i->second;
 
-	int l = snprintf(hbuf, sizeof(hbuf), hdr_fmt.c_str(), gmt_date, idx.size(), "text/html");
-	if (l < 0 || l > (int)sizeof(hbuf))
+	// First called on request?
+	if (peer->state() == STATE_CONNECTED) {
+		l = snprintf(hbuf, sizeof(hbuf), hdr_fmt.c_str(), gmt_date, idx.size(), "text/html");
+		if (l < 0 || l > (int)sizeof(hbuf))
+			return -1;
+
+		if ((r = peer->send(hbuf, l)) != l)
+			return -1;
+
+		peer->left = idx.size();
+	}
+
+	if (peer->offset >= (off_t)idx.size())
 		return -1;
 
-	int r = peer->send(hbuf, l);
-
-	if (r != l)
+	if ((r = peer->send(idx.c_str() + peer->offset, idx.size() - peer->offset)) <= 0)
 		return -1;
 
-	r = peer->send(idx.c_str(), idx.size());
+	peer->offset += r;
+	peer->left -= r;
+	peer->copied += r;
 
-	if (r != (int)idx.size())
-		return -1;
+	if (peer->left == 0)
+		peer->transition(STATE_CONNECTED);
+	else
+		peer->transition(STATE_DOWNLOADING);
 
 	return r;
 }
@@ -1106,8 +1120,8 @@ int lonely_http::GETPOST()
 		if (cur_range_requested) {
 			if (cur_start_range < 0 ||
 			    cur_start_range >= cur_stat.st_size ||
-			    cur_end_range > (size_t)cur_stat.st_size ||
-			    (size_t)cur_start_range >= cur_end_range) {
+			    cur_end_range > cur_stat.st_size ||
+			    cur_start_range >= cur_end_range) {
 				return send_error(HTTP_ERROR_416, -1);
 			}
 		}
@@ -1122,6 +1136,10 @@ int lonely_http::GETPOST()
 
 		rr = download();
 	} else if (r == 0 && S_ISDIR(cur_stat.st_mode)) {
+		peer->offset = 0;
+		peer->copied = 0;
+		//peer->left will be set in send_genindex() 
+
 		// No Range: requests for directories
 		if (cur_range_requested)
 			return send_error(HTTP_ERROR_416, -1);

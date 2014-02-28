@@ -168,7 +168,7 @@ class lonely_http : public lonely<http_client> {
 private:
 	struct stat cur_stat;
 	off_t cur_start_range;
-	size_t cur_end_range;
+	off_t cur_end_range;
 	bool cur_range_requested, forced_send_size;
 	http_request_t cur_request;
 

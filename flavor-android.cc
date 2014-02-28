@@ -109,7 +109,7 @@ int in_send_queue(int fd)
 }
 
 
-ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, size_t &left, size_t &copied, int ftype)
+ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, off_t &left, off_t &copied, int ftype)
 {
 	if (n > MAX_SEND_SIZE)
 		return -1;

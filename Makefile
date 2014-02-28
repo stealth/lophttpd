@@ -30,7 +30,7 @@ lhttpd: lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o clie
 
 frontend: lonely.o socket.o frontend-main.o log.o multicore.o rproxy.o config.o misc.o flavor.o client.o
 	$(LD) $(LDFLAGS) lonely.o socket.o frontend-main.o misc.o log.o multicore.o rproxy.o\
-	                 config.o flavor.o client.o -o frontend -lrt $(LIBS)
+	                 config.o flavor.o client.o -o frontend $(LIBS)
 
 frontend-main.o: frontend-main.cc
 	$(CXX) $(CFLAGS) -c frontend-main.cc

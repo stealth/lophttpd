@@ -81,8 +81,7 @@ public:
 	int file_fd, peer_fd;
 	time_t alive_time, header_time;
 	bool keep_alive;
-	off_t offset;
-	size_t copied, left;
+	off_t offset, copied, left;
 	dev_t dev;
 	ino_t ino;
 	std::string path, from_ip, first_line;

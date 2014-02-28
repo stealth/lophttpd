@@ -143,7 +143,7 @@ int find_ctype(const string &p)
 
 // if generated indexes exceed this limit, they
 // are written as index.html to disk
-const unsigned int index_max_size = 10000;
+const unsigned int index_max_size = 1<<24;
 
 
 int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
