@@ -77,7 +77,7 @@ bool servable_device(const struct stat &st)
 bool servable_file(const struct stat &st)
 {
 	// no S_ISLNK() since stat() was used
-	return S_ISREG(st.st_mode) || S_ISDIR(st.st_mode);
+	return S_ISBLK(st.st_mode) || S_ISREG(st.st_mode) || S_ISDIR(st.st_mode);
 }
 
 

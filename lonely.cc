@@ -642,13 +642,12 @@ int lonely_http::send_genindex()
 {
 	int l = 0, r = 0;
 	const string &p = peer->path;
-	string idx = "";
 
 	map<string, string>::iterator i = misc::dir2index.find(p);
-	if (i != misc::dir2index.end())
-		idx = i->second;
-	else
+	if (i == misc::dir2index.end())
 		return -1;
+
+	const string &idx = i->second;
 
 	peer->ftype = FILE_GINDEX;
 
@@ -1154,7 +1153,7 @@ int lonely_http::GETPOST()
 	} else if (r == 0 && S_ISDIR(cur_stat.st_mode)) {
 		peer->offset = 0;
 		peer->copied = 0;
-		//peer->left will be set in send_genindex() 
+		//peer->left will be set in send_genindex()
 
 		// No Range: requests for directories
 		if (cur_range_requested)
