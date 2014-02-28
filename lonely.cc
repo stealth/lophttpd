@@ -647,6 +647,10 @@ int lonely_http::send_genindex()
 	map<string, string>::iterator i = misc::dir2index.find(p);
 	if (i != misc::dir2index.end())
 		idx = i->second;
+	else
+		return -1;
+
+	peer->ftype = FILE_GINDEX;
 
 	// First called on request?
 	if (peer->state() == STATE_CONNECTED) {
@@ -667,8 +671,11 @@ int lonely_http::send_genindex()
 	if (n > n_send)
 		n = n_send;
 
-	if ((r = peer->send(idx.c_str() + peer->offset, (size_t)n)) <= 0)
+	if ((r = peer->send(idx.c_str() + peer->offset, (size_t)n)) <= 0) {
+		peer->keep_alive = 0;
+		peer->transition(STATE_CONNECTED);
 		return -1;
+	}
 
 	peer->offset += r;
 	peer->left -= r;
@@ -686,6 +693,9 @@ int lonely_http::send_genindex()
 int lonely_http::download()
 {
 	int r = 0;
+
+	if (peer->ftype == FILE_GINDEX)
+		return send_genindex();
 
 	// First called on request?
 	if (peer->state() == STATE_CONNECTED) {
@@ -964,6 +974,8 @@ int lonely_http::stat()
 	const string &p = peer->path;
 	int r = 0, ct = misc::CONTENT_DATA;
 	bool cacheit = 0;
+
+	peer->ftype = FILE_REGULAR;
 
 	// do not cache stupid filenames which most likely is an attack
 	// to exhaust our cache memory with combinations of ..//../foo etc.

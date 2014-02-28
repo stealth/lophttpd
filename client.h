@@ -65,10 +65,12 @@ typedef enum {
 
 
 typedef enum {
-	FILE_REGULAR = 0,
-	FILE_SPECIAL = 1,
-	FILE_DEVICE = 2,
-	FILE_PROC = 3
+	FILE_NONE	= 0x0000,
+	FILE_REGULAR	= 0x1000,
+	FILE_SPECIAL	= 0x2000,
+	FILE_DEVICE	= 0x3000,
+	FILE_PROC	= 0x4000,
+	FILE_GINDEX	= 0x5000
 } file_t;
 
 

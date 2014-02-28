@@ -73,7 +73,7 @@ void http_client::cleanup()
 	alive_time = header_time = 0;
 	dev = ino = 0;
 	ct = in_queue = 0;
-	ftype = FILE_REGULAR;
+	ftype = FILE_NONE;
 	d_state = STATE_NONE;
 	path.clear(); from_ip.clear(); first_line.clear();
 	blen = 0;
