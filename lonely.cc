@@ -132,7 +132,7 @@ const string lonely_http::put_hdr_fmt =
 #ifdef USE_CIPHERS
 string ciphers = USE_CIPHERS;
 #else
-string ciphers = "!LOW:!EXP:!MD5:!CAMELLIA:!RC4:!MEDIUM:!DES:kDHE:RSA:AES256:SHA1:IDEA";
+string ciphers = "ALL:!LOW:!EXP:!MD5:!CAMELLIA:!RC4:!MEDIUM:!DES:!ADH:kDHE:RSA:AES256:SHA256:SHA384:IDEA:@STRENGTH";
 #endif
 
 
@@ -397,7 +397,7 @@ int lonely_http::setup_ssl(const string &cpath, const string &kpath)
 	SSL_CTX_set_session_cache_mode(ssl_ctx, SSL_SESS_CACHE_SERVER);
 
 	// check for DHE and enable it if there are parameters
-	string::size_type dhe = ciphers.find("rDHE)");
+	string::size_type dhe = ciphers.find("kDHE");
 	if (dhe != string::npos) {
 		if (enable_dh(ssl_ctx) != 1)
 			ciphers.erase(dhe, 4);
