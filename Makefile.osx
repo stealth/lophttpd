@@ -8,7 +8,7 @@ DEFS=-DUSE_SSL
 LIBS=-lssl -lcrypto
 
 #override lophttps secure cipher list
-#DEFS+=-DUSE_CIPHERS=\"ALL:!ADH:!LOW:!EXP:!RC4:!MD5:@STRENGTH\"
+#DEFS+=-DUSE_CIPHERS=\"ALL:!ADH:!LOW:!EXP:!RC4:!MD5:kDHE:@STRENGTH\"
 
 CXX=c++ -w -O2 $(DEFS) -ansi
 LD=c++
