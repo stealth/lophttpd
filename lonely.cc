@@ -132,7 +132,7 @@ const string lonely_http::put_hdr_fmt =
 #ifdef USE_CIPHERS
 string ciphers = USE_CIPHERS;
 #else
-string ciphers = "ALL:!LOW:!EXP:!MD5:!CAMELLIA:!RC4:!MEDIUM:!DES:!ADH:kDHE:RSA:AES256:SHA256:SHA384:IDEA:@STRENGTH";
+string ciphers = "!LOW:!EXP:!MD5:!CAMELLIA:!RC4:!MEDIUM:!DES:!ADH:kDHE:RSA:AES256:SHA256:SHA384:IDEA:@STRENGTH";
 #endif
 
 
