@@ -69,6 +69,8 @@ extern "C" {
 #include <openssl/err.h>
 }
 
+extern int enable_dh(SSL_CTX *);
+
 #ifdef USE_SSL_PRIVSEP
 extern "C" {
 #include "sslps.h"
@@ -128,9 +130,9 @@ const string lonely_http::put_hdr_fmt =
 
 
 #ifdef USE_CIPHERS
-const string ciphers = USE_CIPHERS;
+string ciphers = USE_CIPHERS;
 #else
-const string ciphers = "!LOW:!EXP:!MD5:!CAMELLIA:!RC4:!MEDIUM:!DES:RSA:DH:EDH:AES256:SHA1:IDEA";
+string ciphers = "!LOW:!EXP:!MD5:!CAMELLIA:!RC4:!MEDIUM:!DES:kDHE:RSA:AES256:SHA1:IDEA";
 #endif
 
 
@@ -145,6 +147,7 @@ const char *lonely<state_engine>::why()
 {
 	return err.c_str();
 }
+
 
 
 template<typename state_engine>
@@ -392,6 +395,13 @@ int lonely_http::setup_ssl(const string &cpath, const string &kpath)
 	}
 
 	SSL_CTX_set_session_cache_mode(ssl_ctx, SSL_SESS_CACHE_SERVER);
+
+	// check for DHE and enable it if there are parameters
+	string::size_type dhe = ciphers.find("rDHE)");
+	if (dhe != string::npos) {
+		if (enable_dh(ssl_ctx) != 1)
+			ciphers.erase(dhe, 4);
+	}
 
 	if (SSL_CTX_set_cipher_list(ssl_ctx, ciphers.c_str()) != 1) {
 		err = "lonely_http::setup_ssl::SSL_CTX_set_cipher_list:";
