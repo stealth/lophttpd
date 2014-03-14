@@ -244,10 +244,13 @@ should setup your own CA (howto is beyond this README) or import
 the generated X509 into your browser.
 Additionally lophttpd sets a cipher list that is believed to be
 secure (no export ciphers, no weak ciphers and no ECC ciphers -
-where most parameters are given by NIST). However it does not
-support PFS out of the box. If you need that, or you experiance
-problems with web browsers, you can override this list in
-the Makefile.
+where most parameters are given by NIST).
+
+If you also want ephemeral keying (known as Perfect Forward Secrecy [PFS])
+you need to call the "newdh" script before you invoke make.
+This will generate all the necessary DH parameters. Theres nothing more
+to do on the lhttpd commandline then, PFS will be automatically used
+if available.
 
 
 If you have ideas and or offer performance/testing environment please
