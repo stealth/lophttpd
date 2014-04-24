@@ -767,11 +767,7 @@ int rproxy::mangle_request_header()
 		new_hdr.replace(hlen - 2, 2, s);
 	}
 
-	if (path_end - path_begin > (int)mlen && b.path == "/")
-		new_hdr.replace(path_begin - buf, mlen, "");
-	else
-		new_hdr.replace(path_begin - buf, mlen, b.path);
-
+	new_hdr.replace(path_begin - buf, mlen, b.path);
 
 	string xfwd = "X-Forwarded-For: ";
 	xfwd += from_ip;
