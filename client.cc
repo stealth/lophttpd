@@ -47,12 +47,6 @@ extern "C" {
 #include <openssl/ssl.h>
 }
 
-#ifdef USE_SSL_PRIVSEP
-extern "C" {
-#include "sslps.h"
-}
-#endif
-
 #endif
 
 
@@ -86,6 +80,7 @@ void http_client::cleanup()
 	if (ssl)
 		SSL_free(ssl);
 	ssl = NULL;
+	// do not free ssl_ctx, its only borrowed
 #endif
 
 }
@@ -272,13 +267,28 @@ SSL_SESSION *http_client::get_session(SSL *ssl, unsigned char *id, int len, int 
 }
 
 
-int http_client::ssl_accept(SSL_CTX *ssl_ctx)
+int http_client::match_sni(const string &host)
+{
+	if (!ssl_enabled || !ssl || httpd_config::cfile.size() < 2)
+		return 0;
+
+	const char *sni = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
+
+	if (!sni)
+		return 0;
+
+	return strcasecmp(sni, host.c_str()) == 0 ? 1 : -1;
+}
+
+
+
+int http_client::ssl_accept(ssl_container *sslc)
 {
 	int r = 0;
 
 	// may be re-entered if no complete handshake has been seen yet
 	if (!ssl) {
-		if ((ssl = SSL_new(ssl_ctx)) == NULL)
+		if ((ssl = SSL_new(sslc->find_ctx("<default>"))) == NULL)
 			return -1;
 		if (SSL_set_fd(ssl, peer_fd) != 1)
 			return -1;

@@ -50,13 +50,6 @@
 #include "misc.h"
 #include "multicore.h"
 
-#ifdef USE_SSL_PRIVSEP
-extern "C" {
-#include "sslps.h"
-#include "sslps_priv.h"
-}
-#endif
-
 using namespace std;
 
 
@@ -136,27 +129,6 @@ void sigusr1(int x)
 }
 
 
-#ifdef USE_SSL_PRIVSEP
-extern "C" int privsep_init()
-{
-	if (chdir(httpd_config::root.c_str()) < 0)
-		die("chdir");
-
-	if (chroot(httpd_config::root.c_str()) < 0)
-		die("chroot", 1);
-
-	if (setgid(httpd_config::user_gid) < 0)
-		die("setgid", 1);
-	if (initgroups(httpd_config::user.c_str(), httpd_config::user_gid) < 0)
-		die("initgroups", 1);
-	if (setuid(httpd_config::user_uid) < 0)
-		die("setuid", 1);
-
-	return 0;
-}
-#endif
-
-
 int main(int argc, char **argv)
 {
 	int c = 0;
@@ -168,6 +140,8 @@ int main(int argc, char **argv)
 		cerr<<"\a!!! WARNING: !!! Must be called as root in order to chroot() and drop privs properly!\n";
 		cerr<<"Continuing in UNSAFE mode!\n\n";
 	}
+
+	string::size_type idx = string::npos;
 
 	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQN:C:K:e:s:")) != -1) {
 		switch (c) {
@@ -232,10 +206,20 @@ int main(int argc, char **argv)
 			httpd_config::max_connections = strtoul(optarg, NULL, 10);
 			break;
 		case 'K':
-			httpd_config::kfile = optarg;
+			// host:keypath for vHosts+SNI
+			idx = string(optarg).find(":");
+			if (idx == string::npos || idx < 1)
+				httpd_config::kfile["<default>"] = optarg;
+			else
+				httpd_config::kfile[string(optarg, 0, idx)] = string(optarg, idx);
 			break;
 		case 'C':
-			httpd_config::cfile = optarg;
+			// host:certpath for vHosts+SNI
+			idx = string(optarg).find(":");
+			if (idx == string::npos || idx < 1)
+				httpd_config::cfile["<default>"] = optarg;
+			else
+				httpd_config::cfile[string(optarg, 0, idx)] = string(optarg, idx);
 			break;
 		case 's':
 			if (strcmp(optarg, "none") == 0)
@@ -337,11 +321,6 @@ int main(int argc, char **argv)
 	if (setuid(httpd_config::user_uid) < 0)
 		die("setuid", euid == 0);
 
-#ifdef USE_SSL_PRIVSEP
-	if (SSL_privsep_ctrl(PRIVSEP_DROP_PRIV) < 0)
-		die("SSL_privsep_ctrl");
-#endif
-
 	if (httpd_config::virtual_hosts)
 		httpd->vhosts = 1;
 
@@ -373,10 +352,6 @@ int main(int argc, char **argv)
 	}
 
 	httpd->loop();
-
-#ifdef USE_SSL_PRIVSEP
-	SSL_privsep_ctrl(PRIVSEP_EXIT);
-#endif
 
 	delete httpd;
 	return 0;

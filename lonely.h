@@ -46,12 +46,7 @@
 #include <utility>
 #include "client.h"
 #include "log.h"
-
-#ifdef USE_SSL
-extern "C" {
-#include <openssl/ssl.h>
-}
-#endif
+#include "ssl.h"
 
 
 typedef enum {
@@ -184,16 +179,7 @@ private:
 
 	static const std::string hdr_fmt, chunked_hdr_fmt, part_hdr_fmt, put_hdr_fmt;
 
-#ifdef USE_SSL
-	SSL_CTX *ssl_ctx;
-
-#if OPENSSL_VERSION_NUMBER >= 0x10000000L
-	const SSL_METHOD *ssl_method;
-#else
-	SSL_METHOD *ssl_method;
-#endif
-
-#endif
+	ssl_container *sslc;
 
 	int OPTIONS();
 
@@ -236,7 +222,7 @@ public:
 	        : cur_start_range(0), cur_end_range(0),
 		  cur_range_requested(0), forced_send_size(0), cur_request(HTTP_REQUEST_NONE),
 	          min_send(MIN_SEND_SIZE), n_send(s), max_send(MAX_SEND_SIZE),
-	          vhosts(0)
+	          sslc(NULL), vhosts(0)
 	{
 		if (n_send != DEFAULT_SEND_SIZE)
 			forced_send_size = 1;
@@ -244,22 +230,16 @@ public:
 			n_send = max_send;
 		if (n_send < min_send)
 			n_send = min_send;
-#ifdef USE_SSL
-		ssl_ctx = NULL;
-		ssl_method = NULL;
-#endif
 	}
 
 	virtual ~lonely_http()
 	{
 #ifdef USE_SSL
-		if (ssl_ctx)
-			SSL_CTX_free(ssl_ctx);
-		ssl_ctx = NULL;
+		sslc->clear();
 #endif
 	}
 
-	int setup_ssl(const std::string &, const std::string &);
+	int setup_ssl(const std::map<std::string, std::string> &, const std::map<std::string, std::string> &);
 
 	int send_genindex();
 

@@ -32,7 +32,6 @@
 
 #include <unistd.h>
 #include <fcntl.h>
-#include <cassert>
 #include <cerrno>
 #include <string>
 #include <cstring>
@@ -61,23 +60,8 @@
 #include "socket.h"
 #include "flavor.h"
 #include "client.h"
+#include "ssl.h"
 
-#ifdef USE_SSL
-extern "C" {
-#include <openssl/ssl.h>
-#include <openssl/engine.h>
-#include <openssl/err.h>
-}
-
-extern int enable_dh(SSL_CTX *);
-
-#ifdef USE_SSL_PRIVSEP
-extern "C" {
-#include "sslps.h"
-}
-#endif
-
-#endif
 
 using namespace std;
 using namespace ns_socket;
@@ -128,12 +112,6 @@ const string lonely_http::put_hdr_fmt =
 	"Content-Length: %zu\r\n"
 	"Content-Type: text/html\r\n\r\n";
 
-
-#ifdef USE_CIPHERS
-string ciphers = USE_CIPHERS;
-#else
-string ciphers = "!LOW:!EXP:!MD5:!CAMELLIA:!RC4:!MEDIUM:!DES:!ADH:kDHE:RSA:AES256:SHA256:SHA384:IDEA:@STRENGTH";
-#endif
 
 
 bool operator<(const inode &i1, const inode &i2)
@@ -352,72 +330,22 @@ void lonely<state_engine>::log(const string &msg)
 
 
 
-int lonely_http::setup_ssl(const string &cpath, const string &kpath)
+int lonely_http::setup_ssl(const map<string, string> &certs, const map<string, string> &keys)
 {
-
 #ifdef USE_SSL
-	SSL_library_init();
-	SSL_load_error_strings();
-	OpenSSL_add_all_algorithms();
-	OpenSSL_add_all_digests();
+	if (sslc)
+		delete sslc;
 
-	if ((ssl_method = TLSv1_server_method()) == NULL) {
-		err = "lonely_http::setup_ssl::TLSv1_server_method:";
-		err += ERR_error_string(ERR_get_error(), NULL);
-		return -1;
-	}
-	if ((ssl_ctx = SSL_CTX_new(ssl_method)) == NULL) {
-		err = "lonely_http::setup_ssl::SSL_CTX_new:";
-		err += ERR_error_string(ERR_get_error(), NULL);
+	if ((sslc = new (nothrow) ssl_container) == NULL) {
+		err = "lonely_http::setup_ssl: OOM";
 		return -1;
 	}
 
-	if (SSL_CTX_use_certificate_chain_file(ssl_ctx, cpath.c_str()) != 1) {
-		err = "lonely_http::setup_ssl::SSL_CTX_use_certificate_chain_file:";
-		err += ERR_error_string(ERR_get_error(), NULL);
+	if (sslc->init(certs, keys) < 0) {
+		err = string("lonely_http::setup_ssl:") + sslc->why();
 		return -1;
 	}
-	if (SSL_CTX_use_PrivateKey_file(ssl_ctx, kpath.c_str(), SSL_FILETYPE_PEM) != 1) {
-		err = "lonely_http::setup_ssl::SSL_CTX_use_PrivateKey_file:";
-		err += ERR_error_string(ERR_get_error(), NULL);
-		return -1;
-	}
-	if (SSL_CTX_check_private_key(ssl_ctx) != 1) {
-		err = "lonely_http::setup_ssl::SSL_CTX_check_private_key:";
-		err += ERR_error_string(ERR_get_error(), NULL);
-		return -1;
-	}
-
-	if (SSL_CTX_set_session_id_context(ssl_ctx, (const unsigned char *)"lophttpd", 8) != 1) {
-		err = "lonely_http::setup_ssl::SSL_CTX_set_session_id_context:";
-		err += ERR_error_string(ERR_get_error(), NULL);
-		return -1;
-	}
-
-	SSL_CTX_set_session_cache_mode(ssl_ctx, SSL_SESS_CACHE_SERVER);
-
-	// check for DHE and enable it if there are parameters
-	string::size_type dhe = ciphers.find("kDHE");
-	if (dhe != string::npos) {
-		if (enable_dh(ssl_ctx) != 1)
-			ciphers.erase(dhe, 4);
-	}
-
-	if (SSL_CTX_set_cipher_list(ssl_ctx, ciphers.c_str()) != 1) {
-		err = "lonely_http::setup_ssl::SSL_CTX_set_cipher_list:";
-		err += ERR_error_string(ERR_get_error(), NULL);
-		err += "(Try default cipher list in Makefile)";
-		return -1;
-	}
-
-#ifndef USE_SSL_PRIVSEP
-	SSL_CTX_sess_set_new_cb(ssl_ctx, http_client::new_session);
-	SSL_CTX_sess_set_remove_cb(ssl_ctx, http_client::remove_session);
-	SSL_CTX_sess_set_get_cb(ssl_ctx, http_client::get_session);
 #endif
-
-#endif
-
 	return 0;
 }
 
@@ -556,7 +484,7 @@ int lonely_http::loop()
 				continue;
 #ifdef USE_SSL
 			} else if (peer->state() == STATE_HANDSHAKING) {
-				if ((r = peer->ssl_accept(ssl_ctx)) < 0) {
+				if ((r = peer->ssl_accept(sslc)) < 0) {
 					cleanup(i);
 					continue;
 				} else if (r > 0)

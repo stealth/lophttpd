@@ -43,6 +43,9 @@
 #include "config.h"
 
 #ifdef USE_SSL
+
+#include "ssl.h"
+
 extern "C" {
 #include <openssl/ssl.h>
 }
@@ -104,6 +107,7 @@ public:
 	   ino(0), path(""), from_ip(""), first_line(""), ct(0), in_queue(0), ftype(FILE_REGULAR), blen(0),
 	   req_idx(0)
 	{
+
 #ifdef USE_SSL
 		ssl = NULL;
 #endif
@@ -130,13 +134,15 @@ public:
 
 #ifdef USE_SSL
 
-	int ssl_accept(SSL_CTX *);
+	int ssl_accept(ssl_container *);
 
 	static int new_session(SSL *, SSL_SESSION *);
 
 	static void remove_session(SSL_CTX *, SSL_SESSION *);
 
 	static SSL_SESSION *get_session(SSL *, unsigned char *, int, int *);
+
+	int match_sni(const std::string &);
 
 #endif
 

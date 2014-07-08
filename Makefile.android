@@ -3,13 +3,13 @@
 #
 
 ROOT=/S/SOURCES
-NDK=android-ndk-r7
-
-PREFIX=$(ROOT)/$(NDK)/toolchains/arm-linux-androideabi-4.4.3/prebuilt/linux-x86/bin/arm-linux-androideabi-
-SYSROOT=--sysroot=$(ROOT)/$(NDK)/platforms/android-9/arch-arm/
+NDK=android-ndk-r9d
+PREFIX=$(ROOT)/$(NDK)/toolchains/arm-linux-androideabi-4.8/prebuilt/linux-x86_64/bin/arm-linux-androideabi-
+SYSROOT=--sysroot=$(ROOT)/$(NDK)/platforms/android-19/arch-arm/
 INC=-I$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/include\
-    -I$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/libs/armeabi/include
-LIB=-Wl,$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/libs/armeabi/libgnustl_static.a
+    -I$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/4.8/include/\
+    -I$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/4.8/libs/armeabi/include
+LIB=-Wl,$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/4.8/libs/armeabi/libgnustl_static.a
 
 
 CXX=$(PREFIX)c++ $(INC) $(SYSROOT) -Wall -O2 -DANDROID
