@@ -3,18 +3,18 @@ lophttpd: lots of performance httpd
 
 Latest version is at:
 
-http://github.com/stealth/lophttpd
+https://github.com/stealth/lophttpd
 
 Intro
 -----
 
-lophttpd was written to demonstrate (to myself) that it is possible
+_lophttpd_ was written to demonstrate (to myself) that it is possible
 to have a web-server running in a single thread and handling multiple
 connections at the same time. The amount of connections is only limited by the
 OS's maximum number of open files per process and by your CPU/network
 speed.
 
-lophttpd can easily serve 10,000+ clients simulteanously and just
+_lophttpd_ can easily serve 10,000+ clients simulteanously and just
 using 70% CPU on an average sized machine (tested on a core i5).
 
 Scheduling of connections is done in user-space by lophttpd. It uses
@@ -26,8 +26,7 @@ networks, ISO's, large image and video databases, tar-balls etc.
 
 
 By using the OpenSSL library functions, this product uses software developed
-by the OpenSSL Project for use in the OpenSSL Toolkit.
-(http://www.openssl.org/)
+by the [OpenSSL Project](https://www.openssl.org) for use in the OpenSSL Toolkit.
 
 
 Features
@@ -37,7 +36,7 @@ Features
 * IPv6 ready
 * https support
 * does not require syslogd
-* supports multiple log-providers ("mmap" is very fast)
+* supports multiple log-providers (`mmap` is very fast)
 * only handles static content (e.g. no CGI scripts etc)
 * runs in a single process
 * multi-core support for Linux
@@ -47,6 +46,7 @@ Features
 * can serve block device files (whole HDD's), /sys and /proc files
 * does not need config files and has a quiet mode (Android)
 * native file upload support via PUT (default disabled)
+* runs on Linux, BSD, OSX and Android
 
 Run
 ---
@@ -85,13 +85,13 @@ inside __/srv/www/htdocs__ and run
 Users can browse `localhost:8080` then. Whatever they type in the address field
 of their browser can be appended to "vhost" and created as a subdir.
 _lophttpd_ will serve this as a vhost as long as your DNS resolves
-to the IP address where lophttpd is running.
+to the IP address where _lophttpd_ is running.
 
 If you are using vhosts with TLS, you may want to use the SNI feature.
 _lophttpd_ is using this automatically if you provide additional certificates
-for each vhost, in the form of  `vhost:certpath`:
+for each vhost, in the form of  `vhost:certpath`
 
-    # ./lhttpd -C pub.x509 -K key.pem -i -n 1 -C localhost:pub1.x509 -K localhost:key1.pem -H
+    # ./lhttpd -C pub.x509 -K key.pem -C localhost:pub1.x509 -K localhost:key1.pem -H -i
 
 The __pub.x509__ is the default certificate presented to the client if its not
 supporting SNI or requesting hosts that are not served. In case the client indicates
@@ -133,7 +133,7 @@ Since version 0.82 _lophttpd_ contains an experimental feature to
 speed up logging. Since writing 1000's of logs per second can
 be a bottleneck, _lophttpd_ introduces different log providers
 which you can choose via `-L`.
-By default it is `file? which means the normal behavior. You can
+By default it is `file` which means the normal behavior. You can
 also say `mmap` Then it is using a mmap-backed buffer which speeds
 up logging. `aio` is also supported which uses the POSIX real-time
 aio_ calls. However this could lead to drops of messages if
