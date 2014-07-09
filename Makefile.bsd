@@ -19,14 +19,14 @@ clean:
 distclean: clean
 	rm -f lhttpd
 
-lhttpd: lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o client.o dh.o
+lhttpd: lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o client.o dh.o ssl.o
 	$(LD) $(LDFLAGS) lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o\
-	                 client.o dh.o -o lhttpd
+	                 client.o dh.o ssl.o -o lhttpd
 
 
-frontend: lonely.o socket.o frontend-main.o log.o multicore.o rproxy.o config.o misc.o flavor.o client.o dh.o
+frontend: lonely.o socket.o frontend-main.o log.o multicore.o rproxy.o config.o misc.o flavor.o client.o dh.o ssl.o
 	$(LD) $(LDFLAGS) lonely.o socket.o frontend-main.o misc.o log.o multicore.o rproxy.o config.o\
-	                 flavor.o client.o dh.o -o frontend
+	                 flavor.o client.o dh.o ssl.o -o frontend
 
 frontend-main.o: frontend-main.cc
 	$(CXX) $(CFLAGS) -c frontend-main.cc
@@ -63,4 +63,7 @@ client.o: client.cc client.h
 
 dh.o: dh.cc dh512.cc dh1024.cc
 	$(CXX) $(CFLAGS) -c dh.cc
+
+ssl.o: ssl.cc ssl.h
+	$(CXX) $(CFLAGS) -c ssl.cc
 
