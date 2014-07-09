@@ -50,6 +50,8 @@ Features
 * does not need config files and has a quiet mode (Android)
 * native file upload support via PUT (default disabled)
 * runs on Linux, BSD, OSX and Android
+* transparent seccomp sandbox support for Linux
+* comes with a separate frontend revproxy that also supports load balancing
 
 Run
 ---
