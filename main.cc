@@ -211,7 +211,7 @@ int main(int argc, char **argv)
 			if (idx == string::npos || idx < 1)
 				httpd_config::kfile["<default>"] = optarg;
 			else
-				httpd_config::kfile[string(optarg, 0, idx)] = string(optarg, idx);
+				httpd_config::kfile[string(optarg, 0, idx)] = string(optarg, idx + 1, string::npos);
 			break;
 		case 'C':
 			// host:certpath for vHosts+SNI
@@ -219,7 +219,7 @@ int main(int argc, char **argv)
 			if (idx == string::npos || idx < 1)
 				httpd_config::cfile["<default>"] = optarg;
 			else
-				httpd_config::cfile[string(optarg, 0, idx)] = string(optarg, idx);
+				httpd_config::cfile[string(optarg, 0, idx)] = string(optarg, idx + 1, string::npos);
 			break;
 		case 's':
 			if (strcmp(optarg, "none") == 0)

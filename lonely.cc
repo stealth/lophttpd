@@ -1374,6 +1374,11 @@ int lonely_http::handle_request()
 			if (string(ptr2) == "icons" || strstr(ptr2, ".."))
 				return send_error(HTTP_ERROR_404, 0);
 
+#ifdef USE_SSL
+			if (peer->match_sni(ptr2) < 0)
+				return send_error(HTTP_ERROR_400, -1);
+#endif
+
 			// If already requesting vhost files (genindex), then, do not prepend
 			// vhost path again
 			if (!strstr(peer->path.c_str(), "vhost")) {
