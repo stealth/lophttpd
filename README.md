@@ -17,12 +17,15 @@ speed.
 _lophttpd_ can easily serve 10,000+ clients simulteanously and just
 using 70% CPU on an average sized machine (tested on a core i5).
 
-Scheduling of connections is done in user-space by lophttpd. It uses
+Scheduling of connections is done in user-space by _lophttpd_. It uses the
 `sendfile(2)` call and caching to get its good download performance.
 
 _lophttpd_ can be used to serve heavy loaded sites to deliver static content:
 To serve software/package repositories, update servers, content delivery
 networks, ISO's, large image and video databases, tar-balls etc.
+It also comes with _frontend_ reverse proxy that achieves the same performance
+on the (proxied) landing page as _lophttpd_ will in the backend.
+_frontend_ also has built-in load balancing on the HTTP layer.
 
 
 By using the OpenSSL library functions, this product uses software developed
@@ -136,7 +139,7 @@ which you can choose via `-L`.
 By default it is `file` which means the normal behavior. You can
 also say `mmap` Then it is using a mmap-backed buffer which speeds
 up logging. `aio` is also supported which uses the POSIX real-time
-aio_ calls. However this could lead to drops of messages if
+`aio_` calls. However this could lead to drops of messages if
 under very heavy load. Remember that _lophttpd_ is still single threaded,
 even with different log providers. (For aio to be really
 single threaded you may want to check out my Linux aio implementation
