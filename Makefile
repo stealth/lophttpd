@@ -2,9 +2,15 @@
 # This is the Makefile for the Linux flavor
 #
 
+# comment out if you dont need SSL/TLS
 
 DEFS=-DUSE_SSL
 LIBS=-lssl -lcrypto
+
+# comment in for libressl and adjust to your path
+# remember to put libressl lib path to /etc/ld.so.config or LD_LIBRARY_PATH
+#DEFS+=-I/opt/libressl/include
+#LIBS+=-L/opt/libressl/lib64
 
 # enable Linux seccomp sandboxing
 #DEFS+=-DUSE_SANDBOX
