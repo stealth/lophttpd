@@ -67,6 +67,6 @@ dh.o: dh.cc dh512.cc dh1024.cc
 	$(CXX) $(CFLAGS) -c dh.cc
 
 ssl.o: ssl.cc ssl.h
-	$(CXX) $(CFLAGS) -c ssl.c
+	$(CXX) $(CFLAGS) -c ssl.cc
 
 
