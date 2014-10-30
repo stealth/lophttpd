@@ -53,6 +53,21 @@ Features
 * transparent seccomp sandbox support for Linux
 * comes with a separate frontend revproxy that also supports load balancing
 
+Build
+-----
+
+Check the `Makefile` for the platform of your choice and enable or disable stuff
+you want to use (e.g. sandboxing or libressl) or do not want or just leave it as is.
+
+If you want TLS support with ephemeral keying:
+
+    $ ./newdh
+
+then
+
+    $ make -f Makefile.osx
+
+
 Run
 ---
 
@@ -249,7 +264,7 @@ submitted documents which nobody can download.
 HTTPS
 -----
 
-Since version 0.98, _lophttpd_ supports HTTPS (TLSv1). Just generate
+Since version 0.98, _lophttpd_ supports HTTPS (TLSv1+). Just generate
 a public/private keypair:
 
     $ openssl genrsa -out serverkey.pem 4096

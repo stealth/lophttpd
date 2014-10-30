@@ -52,7 +52,7 @@ using namespace std;
 #ifdef USE_CIPHERS
 string ciphers = USE_CIPHERS;
 #else
-string ciphers = "!LOW:!EXP:!MD5:!CAMELLIA:!RC4:!MEDIUM:!DES:!ADH:kDHE:RSA:AES256:SHA256:SHA384:IDEA:@STRENGTH";
+string ciphers = "!LOW:!EXP:!MD5:!CAMELLIA:!RC4:!MEDIUM:!DES:!ADH:kDHE:RSA:AESGCM:AES256:AES128:SHA256:SHA384:IDEA:@STRENGTH";
 #endif
 
 
@@ -87,8 +87,8 @@ int ssl_container::init(const map<string, string> &certs, const map<string, stri
 	OpenSSL_add_all_algorithms();
 	OpenSSL_add_all_digests();
 
-	if ((ssl_method = TLSv1_server_method()) == NULL) {
-		err = "ssl_container::init::TLSv1_server_method:";
+	if ((ssl_method = SSLv23_server_method()) == NULL) {
+		err = "ssl_container::init::SSLv23_server_method:";
 		err += ERR_error_string(ERR_get_error(), NULL);
 		return -1;
 	}
@@ -100,6 +100,8 @@ int ssl_container::init(const map<string, string> &certs, const map<string, stri
 
 	string cpath = "", kpath = "", host = "";
 	SSL_CTX *ssl_ctx = NULL;
+	long op = SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3|SSL_OP_SINGLE_DH_USE;
+
 	for (map<string, string>::const_iterator it = certs.begin(); it != certs.end(); ++it) {
 
 		if (keys.count(it->first) == 0) {
@@ -136,6 +138,12 @@ int ssl_container::init(const map<string, string> &certs, const map<string, stri
 
 		if (SSL_CTX_set_session_id_context(ssl_ctx, (const unsigned char *)"lophttpd", 8) != 1) {
 			err = "ssl_container::init::SSL_CTX_set_session_id_context:";
+			err += ERR_error_string(ERR_get_error(), NULL);
+			return -1;
+		}
+
+		if ((SSL_CTX_set_options(ssl_ctx, op) & op) != op) {
+			err = "ssl_container::init::SSL_CTX_set_options:";
 			err += ERR_error_string(ERR_get_error(), NULL);
 			return -1;
 		}

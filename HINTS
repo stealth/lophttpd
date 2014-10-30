@@ -12,6 +12,11 @@ in general:
   iptables -t raw -A PREROUTING -p tcp --dport 80 -j NOTRACK
   iptables -t raw -A OUTPUT -p tcp --sport 80 -j NOTRACK
 
+  or in the new shape:
+
+  iptables -t raw -A PREROUTING -p tcp --dport 80 -j CT --notrack
+  iptables -t raw -A OUTPUT -p tcp --sport 80 -j CT --notrack
+
   This really buys you connection performance.
 
 - Whenever possible use the "mmap" log provider, it really rocks.

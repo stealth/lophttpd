@@ -83,6 +83,11 @@ int reuse(int sock)
 		return -1;
 	}
 
+#ifdef SO_REUSEPORT
+	one = 1;
+	setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &one, len);
+#endif
+
 	return 0;
 }
 
