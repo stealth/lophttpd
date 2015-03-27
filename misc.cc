@@ -76,6 +76,7 @@ struct ctypes content_types[] = {
 	{".cc", "text/x-c++src"},
 	{".cpp", "text/x-c++src"},
 	{".cxx", "text/x-c++src"},
+	{".css", "text/css"},
 	{".dtd", "text/x-dtd"},
 	{".dvi", "application/x-dvi"},
 	{".fig", "image/x-xfig"},

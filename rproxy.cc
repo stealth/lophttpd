@@ -161,10 +161,10 @@ int rproxy::loop()
 					}
 
 					if (af == AF_INET) {
-						if (inet_ntop(af, &sin4.sin_addr, from, sizeof(from)) < 0)
+						if (inet_ntop(af, &sin4.sin_addr, from, sizeof(from)) == NULL)
 							continue;
 					} else {
-						if (inet_ntop(af, &sin6.sin6_addr, from, sizeof(from)) < 0)
+						if (inet_ntop(af, &sin6.sin6_addr, from, sizeof(from)) == NULL)
 							continue;
 					}
 
