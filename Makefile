@@ -71,7 +71,7 @@ lonely.o: lonely.cc lonely.h
 client.o: client.cc client.h
 	$(CXX) $(CFLAGS) -c client.cc
 
-dh.o: dh.cc dh512.cc dh1024.cc
+dh.o: dh.cc dh2048.cc
 	$(CXX) $(CFLAGS) -c dh.cc
 
 ssl.o: ssl.cc ssl.h
