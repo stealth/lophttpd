@@ -87,8 +87,12 @@ int ssl_container::init(const map<string, string> &certs, const map<string, stri
 	OpenSSL_add_all_algorithms();
 	OpenSSL_add_all_digests();
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+	if ((ssl_method = TLS_server_method()) == NULL) {
+#else
 	if ((ssl_method = SSLv23_server_method()) == NULL) {
-		err = "ssl_container::init::SSLv23_server_method:";
+#endif
+		err = "ssl_container::init::server_method:";
 		err += ERR_error_string(ERR_get_error(), NULL);
 		return -1;
 	}
