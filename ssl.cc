@@ -104,7 +104,9 @@ int ssl_container::init(const map<string, string> &certs, const map<string, stri
 
 	string cpath = "", kpath = "", host = "";
 	SSL_CTX *ssl_ctx = NULL;
-	long op = SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3|SSL_OP_SINGLE_DH_USE;
+
+	long op = SSL_OP_ALL|SSL_OP_NO_SSLv2|SSL_OP_NO_SSLv3|SSL_OP_NO_TLSv1;
+	op |= (SSL_OP_SINGLE_DH_USE|SSL_OP_SINGLE_ECDH_USE);
 
 	for (map<string, string>::const_iterator it = certs.begin(); it != certs.end(); ++it) {
 
