@@ -3,6 +3,10 @@
 #
 # You need to install Xcode and its commandline tools
 
+# On OSX keep in mind that Apple marks the system openssl lib
+# functions as deprecated, in favor of their own crypto libs. This
+# leads to (unnecessary) warnings. (goto fail for the win).
+# You can add your own openssl includes/lib dirs here, to get rid of it.
 
 INC=
 LIBS=

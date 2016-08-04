@@ -61,9 +61,15 @@ If you want TLS support with ephemeral keying:
 
     $ ./newdh
 
-then
+then for Linux:
+
+    $ make
+
+for OSX:
 
     $ make -f Makefile.osx
+
+and so on.
 
 
 Run
@@ -254,7 +260,7 @@ Then, the file is transferred to `$WEBROOT/upload/file`. If you additionally
 start `lhttpd` with `-r`, a random token is appended to the file when its stored.
 If you put an empty __index.html__ inside __upload__, outside visitors cannot
 download the uploaded file, as they do not know the URL. If you want that
-nobody, not even the up-loader can see the URL, you can use `-Q'`
+nobody, not even the up-loader can see the URL, you can use `-Q`
 This effectively creates you an upload-only service where you can store
 submitted documents which nobody can download.
 
