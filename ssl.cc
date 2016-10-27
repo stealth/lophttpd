@@ -148,7 +148,7 @@ int ssl_container::init(const map<string, string> &certs, const map<string, stri
 			return -1;
 		}
 
-		if ((SSL_CTX_set_options(ssl_ctx, op) & op) != op) {
+		if ((unsigned long)(SSL_CTX_set_options(ssl_ctx, op) & op) != (unsigned long)op) {
 			err = "ssl_container::init::SSL_CTX_set_options:";
 			err += ERR_error_string(ERR_get_error(), NULL);
 			return -1;
