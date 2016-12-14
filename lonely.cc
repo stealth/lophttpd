@@ -418,13 +418,16 @@ int lonely_http::loop()
 				continue;
 
 			if ((pfds[i].revents & (POLLERR|POLLHUP|POLLNVAL)) != 0) {
-				cleanup(i);
+				// poll errors on accept() should never happen (any of above flags
+				// only trigger on output), but better play safe
+				if (peer->state() != STATE_ACCEPTING)
+					cleanup(i);
 				continue;
 			}
 
 			pfds[i].revents = 0;
 
-			// All below states have an event pending, since we wont
+			// All states below have an event pending, since we wont
 			// be here if revents would be 0
 
 			// new connection ready to accept?
