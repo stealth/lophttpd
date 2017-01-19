@@ -154,6 +154,8 @@ int ssl_container::init(const map<string, string> &certs, const map<string, stri
 			return -1;
 		}
 
+		SSL_CTX_set_mode(ssl_ctx, SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER|SSL_MODE_ENABLE_PARTIAL_WRITE);
+
 		SSL_CTX_set_session_cache_mode(ssl_ctx, SSL_SESS_CACHE_SERVER);
 
 		// check for DHE and enable it if there are parameters

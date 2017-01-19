@@ -236,7 +236,11 @@ int webstress::ssl_init()
 	OpenSSL_add_all_algorithms();
 	OpenSSL_add_all_digests();
 
-	if ((ssl_method = TLSv1_client_method()) == NULL) {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+	if ((ssl_method = TLS_client_method()) == NULL) {
+#else
+	if ((ssl_method = SSLv23_client_method()) == NULL) {
+#endif
 		fprintf(stderr, "ERR: TLSv1_client_method: %s\n", ERR_error_string(ERR_get_error(), NULL));
 		return -1;
 	}
@@ -247,6 +251,7 @@ int webstress::ssl_init()
 	}
 	SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
 	SSL_CTX_set_options(ssl_ctx, SSL_OP_ALL);
+	SSL_CTX_set_mode(ssl_ctx, SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER|SSL_MODE_ENABLE_PARTIAL_WRITE);
 	return 0;
 }
 
