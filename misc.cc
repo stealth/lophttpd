@@ -115,6 +115,7 @@ struct ctypes content_types[] = {
 	{".wav", "audio/x-wav"},
 	{".wmv", "video/x-ms-wm"},
 	{".xbm", "image/x-xbitmap"},
+	{".x509", "application/x-x509-ca-cert"},
 	{".xml", "text/xml"},
 	{".zip", "application/zip"},
 	{".zoo", "application/x-zoo"},
@@ -293,25 +294,23 @@ int ftw_helper(const char *fpath, const struct stat *st, int typeflag)
 
 int ftw_once(const char *dir, int (*fn) (const char *fpath, const struct stat *sb, int typeflag), int nopenfd)
 {
-	DIR *dfd = NULL;
+	DIR *dfd = nullptr;
 	string pathname = "";
-	struct dirent dent, *res = NULL;
+	struct dirent *de = nullptr;
 	struct stat lst;
 
-	if ((dfd = opendir(dir)) == NULL)
+	if ((dfd = opendir(dir)) == nullptr)
 		return -1;
 
 	for (;;) {
-		if (readdir_r(dfd, &dent, &res) < 0)
+		if ((de = readdir(dfd)) == nullptr)
 			break;
-		if (!res)
-			break;
-		if (strcmp(dent.d_name, ".") == 0 || strcmp(dent.d_name, "..") == 0)
+		if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
 			continue;
 		pathname = dir;
 		if (pathname[pathname.size() - 1] != '/')
 			pathname += "/";
-		pathname += dent.d_name;
+		pathname += de->d_name;
 
 		if (lstat(pathname.c_str(), &lst) < 0)
 			continue;
