@@ -7,9 +7,7 @@ LIBS=
 DEFS=
 LDFLAGS=
 
-
 DEFS+=-DUSE_SSL
-LIBS+=-lssl -lcrypto
 
 #override lophttps secure cipher list
 #DEFS+=-DUSE_CIPHERS=\"ALL:!ADH:!LOW:!EXP:!RC4:!MD5:kDHE:@STRENGTH\"
@@ -18,6 +16,12 @@ LIBS+=-lssl -lcrypto
 CXXFLAGS=-std=c++11 -Wall -O2 -pedantic $(INC) $(DEFS)
 CXX=c++
 LD=c++
+
+LIBS+=-lssl -lcrypto
+
+# if your CXX=clang
+#LIBS+=-lstdc++
+
 
 all: lhttpd frontend
 

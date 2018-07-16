@@ -30,7 +30,7 @@
  * SUCH DAMAGE.
  */
 
-
+#include <cstdio>
 #include <string>
 #include <time.h>
 #include <errno.h>

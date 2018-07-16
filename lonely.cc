@@ -30,6 +30,7 @@
  * SUCH DAMAGE.
  */
 
+#include <cstdio>
 #include <unistd.h>
 #include <fcntl.h>
 #include <cerrno>
