@@ -9,9 +9,7 @@ LIBS=
 DEFS=
 LDFLAGS=
 
-
 DEFS+=-DUSE_SSL
-LIBS+=-lssl -lcrypto
 
 # comment in for libressl and adjust to your path
 # remember to put libressl lib path to /etc/ld.so.config or LD_LIBRARY_PATH
@@ -27,6 +25,13 @@ LIBS+=-lssl -lcrypto
 CXXFLAGS=-std=c++11 -Wall -O2 -pedantic $(INC) $(DEFS)
 CXX=c++
 LD=c++
+
+LIBS+=-lssl -lcrypto
+
+# if your CXX=clang
+#LIBS+=-lstdc++
+
+
 
 all: lhttpd frontend
 

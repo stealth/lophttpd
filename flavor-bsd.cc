@@ -108,7 +108,6 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, off_t &left, off_t &
 	if (n > MAX_SEND_SIZE)
 		return -1;
 
-	off_t sbytes = 0;
 	ssize_t r = 0, l = 0;
 
 	// proc files
@@ -140,6 +139,8 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, off_t &left, off_t &
 	}
 
 #ifdef __FreeBSD__
+	off_t sbytes = 0;
+
 	if (ftype != FILE_DEVICE) {
 		r = ::sendfile(fd, peer, *offset, n, NULL, &sbytes, 0);
 		if (sbytes > 0) {
