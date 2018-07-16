@@ -139,7 +139,7 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, off_t &left, off_t &
 		return r;
 	}
 
-
+#ifdef __FreeBSD__
 	if (ftype != FILE_DEVICE) {
 		r = ::sendfile(fd, peer, *offset, n, NULL, &sbytes, 0);
 		if (sbytes > 0) {
@@ -149,8 +149,10 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, off_t &left, off_t &
 		}
 		if (r == 0)
 			r = (ssize_t)sbytes;
-	// On FreeBSD, device files do not support sendfile()
+	// On FreeBSD, device files do not support sendfile(), NetBSD and OpenBSD
+	// dont have sendfile() at all
 	} else {
+#endif
 		// n cannot be larger than MAX_SEND_SIZE
 		char buf[MAX_SEND_SIZE];
 		r = pread(fd, buf, n, *offset);
@@ -163,9 +165,14 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, off_t &left, off_t &
 				copied += r;
 			}
 		}
+#ifdef __FreeBSD__
 	}
+#endif
+
+
 	if (r <= 0)
 		r = -1;
+
 	return r;
 }
 
