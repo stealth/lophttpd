@@ -2,6 +2,8 @@
 # This is the Makefile for the BSD flavor
 #
 
+# comment out if you dont need SSL/TLS
+
 INC=
 LIBS=
 DEFS=
@@ -9,9 +11,9 @@ LDFLAGS=
 
 DEFS+=-DUSE_SSL
 
+
 #override lophttps secure cipher list
 #DEFS+=-DUSE_CIPHERS=\"ALL:!ADH:!LOW:!EXP:!RC4:!MD5:kDHE:@STRENGTH\"
-
 
 CXXFLAGS=-std=c++11 -Wall -O2 -pedantic $(INC) $(DEFS)
 CXX=c++
@@ -22,60 +24,63 @@ LIBS+=-lssl -lcrypto
 # if your CXX=clang
 #LIBS+=-lstdc++
 
+.PHONY: all clean distclean
 
-all: lhttpd frontend
+all: build build/lhttpd build/frontend
+
+build:
+	mkdir build || true
 
 clean:
-	rm -f *.o
+	rm -f build/*.o
 
 distclean: clean
-	rm -f lhttpd
+	rm -rf build
 
-lhttpd: lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o client.o dh.o ssl.o
-	$(LD) $(LDFLAGS) lonely.o socket.o main.o misc.o log.o multicore.o config.o flavor.o\
-	                 client.o dh.o ssl.o -o lhttpd $(LIBS)
+build/lhttpd: build/lonely.o build/socket.o build/main.o build/misc.o build/log.o build/multicore.o build/config.o build/flavor.o build/client.o build/dh.o build/ssl.o
+	$(LD) $(LDFLAGS) $^ -o $@ $(LIBS)
 
 
-frontend: lonely.o socket.o frontend-main.o log.o multicore.o rproxy.o config.o misc.o flavor.o client.o dh.o ssl.o
-	$(LD) $(LDFLAGS) lonely.o socket.o frontend-main.o misc.o log.o multicore.o rproxy.o config.o\
-	                 flavor.o client.o dh.o ssl.o -o frontend $(LIBS)
+build/frontend: build/lonely.o build/socket.o build/frontend-main.o build/log.o build/multicore.o build/rproxy.o build/config.o build/misc.o build/flavor.o build/client.o build/dh.o build/ssl.o
+	$(LD) $(LDFLAGS) $^ -o $@ $(LIBS)
 
-frontend-main.o: frontend-main.cc
-	$(CXX) $(CXXFLAGS) -c frontend-main.cc
+build/frontend-main.o: frontend-main.cc
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-rproxy.o: rproxy.cc rproxy.h
-	$(CXX) $(CXXFLAGS) -c rproxy.cc
+build/rproxy.o: rproxy.cc rproxy.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-config.o: config.cc config.h
-	$(CXX) $(CXXFLAGS) -c config.cc
+build/config.o: config.cc config.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-multicore.o: multicore.cc multicore.h
-	$(CXX) $(CXXFLAGS) -c multicore.cc
+build/multicore.o: multicore.cc multicore.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-log.o: log.cc log.h
-	$(CXX) $(CXXFLAGS) -c log.cc
+build/log.o: log.cc log.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-misc.o: misc.cc misc.h
-	$(CXX) $(CXXFLAGS) -c misc.cc
+build/misc.o: misc.cc misc.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-main.o: main.cc
-	$(CXX) $(CXXFLAGS) -c main.cc
+build/main.o: main.cc
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-flavor.o: flavor-bsd.cc flavor.h
-	$(CXX) $(CXXFLAGS) -c flavor-bsd.cc -o flavor.o
+build/flavor.o: flavor-bsd.cc flavor.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-socket.o: socket.cc socket.h
-	$(CXX) $(CXXFLAGS) -c socket.cc
+build/socket.o: socket.cc socket.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-lonely.o: lonely.cc lonely.h
-	$(CXX) $(CXXFLAGS) -c lonely.cc
+build/lonely.o: lonely.cc lonely.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-client.o: client.cc client.h
-	$(CXX) $(CXXFLAGS) -c client.cc
+build/client.o: client.cc client.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-dh.o: dh.cc dh2048.cc
-	$(CXX) $(CXXFLAGS) -c dh.cc
+build/dh.o: dh.cc dh2048.cc
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-ssl.o: ssl.cc ssl.h
-	$(CXX) $(CXXFLAGS) -c ssl.cc
+build/ssl.o: ssl.cc ssl.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 

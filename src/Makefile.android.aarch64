@@ -1,20 +1,20 @@
 #
-# This is the Makefile for the Android flavor, ARM32
+# This is the Makefile for the Android flavor, Aarch64
 #
 
 ROOT=/opt
 NDK=android-ndk-r17b
 
-PREFIX=$(ROOT)/$(NDK)/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-
-SYSROOT=--sysroot=$(ROOT)/$(NDK)/platforms/android-24/arch-arm/
+PREFIX=$(ROOT)/$(NDK)/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-
+SYSROOT=--sysroot=$(ROOT)/$(NDK)/platforms/android-24/arch-arm64/
 SYSROOT+=-isysroot $(ROOT)/$(NDK)/sysroot
 
-INC=-isystem $(ROOT)/$(NDK)/sysroot/usr/include/arm-linux-androideabi\
+INC=-isystem $(ROOT)/$(NDK)/sysroot/usr/include/aarch64-linux-android\
     -I$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/include\
     -I$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/4.9/include/\
-    -I$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/4.9/libs/armeabi-v7a/include
+    -I$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/4.9/libs/arm64-v8a/include
 
-LIB=-Wl,$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/4.9/libs/armeabi-v7a/libgnustl_static.a
+LIB=-Wl,$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/4.9/libs/arm64-v8a/libgnustl_static.a
 
 DEF=-DANDROID
 
