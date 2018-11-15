@@ -39,11 +39,11 @@ distclean:
 	rm -rf build
 
 build/lhttpd: build/lonely.o build/socket.o build/main.o build/misc.o build/log.o build/multicore.o build/config.o build/flavor.o build/client.o build/dh.o build/ssl.o
-	$(LD) $(LDFLAGS) $^ -o $@ $(LIBS)
+	$(LD) $(LDFLAGS) build/lonely.o build/socket.o build/main.o build/misc.o build/log.o build/multicore.o build/config.o build/flavor.o build/client.o build/dh.o build/ssl.o  -o $@ $(LIBS)
 
 
 build/frontend: build/lonely.o build/socket.o build/frontend-main.o build/log.o build/multicore.o build/rproxy.o build/config.o build/misc.o build/flavor.o build/client.o build/dh.o build/ssl.o
-	$(LD) $(LDFLAGS) $^ -o $@ $(LIBS)
+	$(LD) $(LDFLAGS) build/lonely.o build/socket.o build/frontend-main.o build/log.o build/multicore.o build/rproxy.o build/config.o build/misc.o build/flavor.o build/client.o build/dh.o build/ssl.o -o $@ $(LIBS)
 
 build/frontend-main.o: frontend-main.cc
 	$(CXX) $(CXXFLAGS) -c frontend-main.cc -o $@
