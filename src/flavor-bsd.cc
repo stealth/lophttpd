@@ -154,7 +154,7 @@ ssize_t sendfile(int peer, int fd, off_t *offset, size_t n, off_t &left, off_t &
 	} else {
 #endif
 		// n cannot be larger than MAX_SEND_SIZE
-		char buf[MAX_SEND_SIZE];
+		char buf[MAX_SEND_SIZE] = {0};
 		r = pread(fd, buf, n, *offset);
 		if (r > 0) {
 			// write(), not writen()
