@@ -46,11 +46,12 @@
 using namespace std;
 
 
+/*
 static inline off_t next_aligned_size(off_t size)
 {
 	return (size + 1024*1024 + 0x1000)&~(0x1000-1);
 }
-
+*/
 
 int log_provider::open_log(const string &logfile, const string &method, int core = 0)
 {

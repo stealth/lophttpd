@@ -32,8 +32,8 @@
 
 // All the client state machine declarations
 
-#ifndef __client_h__
-#define __client_h__
+#ifndef lophttpd_client_h
+#define lophttpd_client_h
 
 #include <string>
 #include <cstring>

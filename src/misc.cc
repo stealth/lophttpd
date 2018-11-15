@@ -97,6 +97,7 @@ struct ctypes content_types[] = {
 	{".ogg", "application/ogg"},
 	{".pac", "application/x-ns-proxy-autoconfig"},
 	{".pdf", "application/pdf"},
+	{".pgn", "application/x-chess-pgn"},
 	{".pls", "audio/x-scpls"},
 	{".png", "image/png"},
 	{".ps", "application/postscript"},

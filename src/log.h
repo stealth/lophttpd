@@ -31,11 +31,12 @@
  */
 
 
-#ifndef __log_h__
-#define __log_h__
+#ifndef lophttpd_log_h
+#define lophttpd_log_h
 
 #include <string>
 #include <sys/types.h>
+
 #ifndef ANDROID
 #include <aio.h>
 #endif
@@ -44,9 +45,17 @@
 class log_provider {
 private:
 	int log_fd;
+
+// Need to disable -pedantic for stupid glinc header, having a 0-sized array for alignment inside a struct
+// of aio!
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+
 #ifndef ANDROID
 	struct aiocb log_aio;
 #endif
+#pragma GCC diagnostic pop
+
 	void *log_area;
 	off_t log_index, log_size;
 

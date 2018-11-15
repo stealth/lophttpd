@@ -31,9 +31,12 @@ LIBS+=-lssl -lcrypto
 # if your CXX=clang
 #LIBS+=-lstdc++
 
+.PHONY: all clean distclean
 
+all: build lhttpd frontend
 
-all: lhttpd frontend
+build:
+	mkdir build || true
 
 clean:
 	rm -f *.o
