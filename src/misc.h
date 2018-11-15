@@ -30,8 +30,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef __misc_h__
-#define __misc_h__
+#ifndef lophttpd_misc_h
+#define lophttpd_misc_h
 
 #include <map>
 #include <string>

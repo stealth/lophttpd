@@ -1,5 +1,5 @@
-#ifndef __config_h__
-#define __config_h__
+#ifndef lophttpd_config_h
+#define lophttpd_config_h
 
 #include <map>
 #include <string>

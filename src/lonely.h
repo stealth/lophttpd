@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2014 Sebastian Krahmer.
+ * Copyright (C) 2008-2018 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,8 +30,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef __lonely_h__
-#define __lonely_h__
+#ifndef lophttpd_lonely_h
+#define lophttpd_lonely_h
 
 #include <stdio.h>
 #include <poll.h>

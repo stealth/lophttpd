@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001-2012 Sebastian Krahmer.
+ * Copyright (C) 2001-2018 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,8 +29,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ifndef _MY_SOCKET_H_
-#define _MY_SOCKET_H_
+#ifndef lophttpd_socket_h
+#define lophttpd_socket_h
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -63,5 +63,5 @@ int writen(int fd, const void *buf, size_t len);
 
 } // namespace
 
-#endif // _MY_SOCKET_H_
+#endif
 

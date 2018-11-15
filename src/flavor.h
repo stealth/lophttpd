@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2012 Sebastian Krahmer.
+ * Copyright (C) 2008-2018 Sebastian Krahmer.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,8 +31,8 @@
  */
 
 
-#ifndef __flavor__
-#define __flavor__
+#ifndef lophttpd_flavor_h
+#define lophttpd_flavor_h
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -66,5 +66,5 @@ int sandbox();
 }
 
 
-#endif // __flavor_h__
+#endif
 

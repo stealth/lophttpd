@@ -41,7 +41,7 @@ build:
 clean:
 	rm -f build/*.o
 
-distclean: clean
+distclean:
 	rm -rf build
 
 build/lhttpd: build/lonely.o build/socket.o build/main.o build/misc.o build/log.o build/multicore.o build/config.o build/flavor.o build/client.o build/dh.o build/ssl.o

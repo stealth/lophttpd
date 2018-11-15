@@ -1,5 +1,5 @@
-#ifndef __multicore_h__
-#define __multicore_h__
+#ifndef lophttpd_multicore_h
+#define lophttpd_multicore_h
 
 namespace misc {
 
