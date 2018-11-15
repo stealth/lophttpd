@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 print "Generating 2048 bit DH parameters ...\n\n";
 system("openssl dhparam -5 -noout -C 2048 > dh2048.cc");
