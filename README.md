@@ -55,19 +55,36 @@ Build
 -----
 
 Check the `Makefile` for the platform of your choice and enable or disable stuff
-you want to use (e.g. sandboxing or libressl) or do not want or just leave it as is.
+you want to use (e.g. sandboxing or [LibreSSL](https://www.libressl.org) or do not want or just leave it as is.
+
+```
+$ cd src
+```
 
 If you want TLS support with ephemeral keying:
 
-    $ ./newdh
+```
+src $ ./newdh
+```
 
 then for Linux:
 
-    $ make
+```
+src $ make
+```
 
-for OSX:
+If you have GNU-make installed on BSDish systems:
 
-    $ make -f Makefile.osx
+```
+src $ gmake
+```
+
+otherwise you can:
+
+```
+src $ make -f Makefile.bsd
+```
+
 
 and so on.
 
