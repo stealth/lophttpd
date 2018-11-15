@@ -85,8 +85,7 @@ otherwise you can:
 src $ make -f Makefile.bsd
 ```
 
-
-and so on.
+and so on. The `lhttpd` binary will be in the `src/build` subdir.
 
 
 Run
