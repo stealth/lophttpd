@@ -9,6 +9,7 @@ LIBS=
 DEFS=
 LDFLAGS=
 
+DEFS+=-D_FILE_OFFSET_BITS=64
 DEFS+=-DUSE_SSL
 
 
@@ -45,42 +46,42 @@ build/frontend: build/lonely.o build/socket.o build/frontend-main.o build/log.o 
 	$(LD) $(LDFLAGS) $^ -o $@ $(LIBS)
 
 build/frontend-main.o: frontend-main.cc
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c frontend-main.cc -o $@
 
 build/rproxy.o: rproxy.cc rproxy.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c rproxy.cc -o $@
 
 build/config.o: config.cc config.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c config.cc -o $@
 
 build/multicore.o: multicore.cc multicore.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c multicore.cc -o $@
 
 build/log.o: log.cc log.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c log.cc -o $@
 
 build/misc.o: misc.cc misc.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c misc.cc -o $@
 
 build/main.o: main.cc
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c main.cc -o $@
 
 build/flavor.o: flavor-bsd.cc flavor.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c flavor-bsd.cc -o $@
 
 build/socket.o: socket.cc socket.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c socket.cc -o $@
 
 build/lonely.o: lonely.cc lonely.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c lonely.cc -o $@
 
 build/client.o: client.cc client.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c client.cc -o $@
 
 build/dh.o: dh.cc dh2048.cc
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c dh.cc -o $@
 
 build/ssl.o: ssl.cc ssl.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c ssl.cc -o $@
 
 

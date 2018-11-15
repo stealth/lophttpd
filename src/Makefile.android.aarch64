@@ -16,9 +16,10 @@ INC=-isystem $(ROOT)/$(NDK)/sysroot/usr/include/aarch64-linux-android\
 
 LIB=-Wl,$(ROOT)/$(NDK)/sources/cxx-stl/gnu-libstdc++/4.9/libs/arm64-v8a/libgnustl_static.a
 
-DEF=-DANDROID
+DEFS=-DANDROID
+DEFS+=-D_FILE_OFFSET_BITS=64
 
-CXX=$(PREFIX)gcc -O2 -Wall -pedantic -std=c++11 $(SYSROOT) $(INC) $(DEF)
+CXX=$(PREFIX)gcc -O2 -Wall -pedantic -std=c++11 $(SYSROOT) $(INC) $(DEFS)
 LD=$(PREFIX)gcc $(SYSROOT)
 
 

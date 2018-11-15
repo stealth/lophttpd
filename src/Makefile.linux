@@ -9,6 +9,7 @@ LIBS=
 DEFS=
 LDFLAGS=
 
+DEFS+=-D_FILE_OFFSET_BITS=64
 DEFS+=-DUSE_SSL
 
 # comment in for libressl and adjust to your path
