@@ -49,7 +49,7 @@ int reuse(int sock);
 
 int dstaddr(int sock, sockaddr_in *dst);
 
-int bind_local(int sock, const sockaddr *, socklen_t, bool do_listen);
+int bind_local(int sock, const sockaddr *, socklen_t, bool do_listen, bool fastopen = 0);
 
 int bind_local(int sock, uint16_t port, bool do_listen, int tries);
 

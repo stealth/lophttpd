@@ -160,7 +160,7 @@ int lonely<state_engine>::init(const string &host, const string &port)
 	}
 
 	// bind & listen
-	if (bind_local(sock_fd, ai->ai_addr, ai->ai_addrlen, 1) < 0) {
+	if (bind_local(sock_fd, ai->ai_addr, ai->ai_addrlen, 1, httpd_config::tfo) < 0) {
 		freeaddrinfo(ai);
 		err = ns_socket::why();
 		return -1;

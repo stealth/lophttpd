@@ -92,7 +92,7 @@ int reuse(int sock)
 }
 
 
-int bind_local(int sock, const struct sockaddr *s, socklen_t slen, bool do_listen)
+int bind_local(int sock, const struct sockaddr *s, socklen_t slen, bool do_listen, bool fastopen)
 {
 	if (reuse(sock) < 0)
 		return -1;
@@ -102,6 +102,13 @@ int bind_local(int sock, const struct sockaddr *s, socklen_t slen, bool do_liste
 		error += strerror(errno);
 		return -1;
 	}
+
+#ifdef TCP_FASTOPEN
+	if (fastopen) {
+		int somax = 128;	// SOMAXCONN
+		setsockopt(sock, SOL_TCP, TCP_FASTOPEN, &somax, sizeof(somax));	// ignore error
+	}
+#endif
 
 	if (do_listen) {
 		if (listen(sock, 100000) < 0) {
@@ -144,7 +151,7 @@ int bind_local(int sock, uint16_t port, int af, bool do_listen, int tries)
 
 	for (; i < tries; ++i) {
 		sin4.sin_port = sin6.sin6_port = htons(port + i);
-		if (bind(sock, sin, slen) < 0 && 
+		if (bind(sock, sin, slen) < 0 &&
 		    (errno != EADDRINUSE || i == tries - 1)) {
 			error = "ns_socket::bind_local::bind: ";
 			error += strerror(errno);

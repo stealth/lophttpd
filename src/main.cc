@@ -91,7 +91,8 @@ void help(const char *p)
 	    <<"\t\t -e : cache requests (at most n) that cause 404 errors, to save parsing next time seen"<<endl
 	    <<"\t\t -s : scheduling algo for more than "<<MANY_RECEIVERS<<" clients (default 'none')"<<endl
 	    <<"\t\t -Q : (implies -r) do not tell client the rand token (for write-only uploads)"<<endl
-	    <<"\t\t -r : add rand token to uploaded filenames (default off)"<<endl<<endl;
+	    <<"\t\t -r : add rand token to uploaded filenames (default off)"<<endl
+	    <<"\t\t -F : enable TCP Fast Open, if supported by OS"<<endl<<endl;
 	exit(errno);
 }
 
@@ -134,7 +135,7 @@ int main(int argc, char **argv)
 	int c = 0;
 	bool port_was_given = 0;
 
-	cout<<"\nlophttpd -- lots of performance httpd (C) 2008-2014 Sebastian Krahmer\n\n";
+	cout<<"\nlophttpd -- lots of performance httpd (C) 2008-2018 Sebastian Krahmer\n\n";
 
 	if (getuid() != 0) {
 		cerr<<"\a!!! WARNING: !!! Must be called as root in order to chroot() and drop privs properly!\n";
@@ -143,7 +144,7 @@ int main(int argc, char **argv)
 
 	string::size_type idx = string::npos;
 
-	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQN:C:K:e:s:")) != -1) {
+	while ((c = getopt(argc, argv, "iHhR:p:l:L:u:n:S:I:6B:qU:rEQN:C:K:e:s:F")) != -1) {
 		switch (c) {
 		case '6':
 			if (httpd_config::host == "0.0.0.0")
@@ -232,6 +233,10 @@ int main(int argc, char **argv)
 				httpd_config::client_sched = CLIENT_SCHED_MINIMIZE;
 			else
 				help(*argv);
+			break;
+		case 'F':
+			// enable TCP Fast Open on listening socket
+			httpd_config::tfo = 1;
 			break;
 		case 'h':
 		default:

@@ -312,3 +312,19 @@ if available.
 If you have ideas and or offer performance/testing environment please
 drop me an email: sebastian.krahmer [at] gmail [dot] com :-)
 
+TCP Fast Open
+-------------
+
+_Lophttpd_ supports TCP Fast Open. To use it, you have to first enable it
+in your OS. On Linux to have client and server support for TFO:
+
+```
+# echo 3 > /proc/sys/net/ipv4/tcp_fastopen
+```
+
+Then you can start `lhttpd` with the `-F` switch to make use of it.
+Inside `tests` directory theres a small test program to check support
+of it. In order to find out if a server supports TFO, you'd need to use
+`tcpdump` on that connection, as from the program output itself you
+won't see any difference for server that don't support it.
+
