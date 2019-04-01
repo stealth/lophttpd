@@ -89,6 +89,7 @@ static const struct sock_filter prefix[] = {
 	SC_ALLOW(lstat),
 #endif
 	SC_ALLOW(fcntl),
+	SC_ALLOW(getpid),
 	SC_ALLOW(brk),
 	SC_ALLOW(close),
 	SC_ALLOW(sendfile),
