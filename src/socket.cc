@@ -210,7 +210,7 @@ int tcp_connect_nb(const struct addrinfo &ai, uint16_t local_port)
 int finish_connecting(int fd)
 {
 	int e = 0;
-	socklen_t len = sizeof(error);
+	socklen_t len = sizeof(e);
 	if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &e, &len) < 0 || e < 0) {
 		error = "ns_socket::finish_connecting::getsockopt:";
 		error += strerror(errno);
